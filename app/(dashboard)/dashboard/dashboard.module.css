@@ -1,0 +1,7 @@
+.dash-section-gap { display: flex; flex-direction: column; gap: var(--sp-6); }
+.dash-2col { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-6); align-items: start; }
+.dash-col { display: flex; flex-direction: column; gap: var(--sp-6); }
+.chart-box { position: relative; width: 100%; }
+.empty-table-body { min-height: 90px; }
+.qty-pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-sm); background: var(--info-bg); color: var(--info-fg); font-weight: 700; font-size: 12.5px; }
+.alert-pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-sm); background: var(--danger-bg); color: var(--danger-fg); font-weight: 700; font-size: 12.5px; }
