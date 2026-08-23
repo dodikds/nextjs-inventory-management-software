@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Toaster } from "react-hot-toast";
 import "./gildedglow.css";
 
 export const metadata: Metadata = {
@@ -17,7 +18,39 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              fontFamily: "var(--font-body)",
+              fontSize: "14px",
+              background: "var(--surface)",
+              color: "var(--ink)",
+              border: "1px solid var(--gray-200)",
+              borderRadius: "var(--r-md)",
+              boxShadow: "var(--shadow-md)",
+            },
+            success: {
+              iconTheme: { primary: "var(--success)", secondary: "#fff" },
+              style: {
+                background: "var(--success-bg)",
+                color: "var(--success-fg)",
+                border: "1px solid var(--success-bg)",
+              },
+            },
+            error: {
+              iconTheme: { primary: "var(--danger)", secondary: "#fff" },
+              style: {
+                background: "var(--danger-bg)",
+                color: "var(--danger-fg)",
+                border: "1px solid var(--danger-bg)",
+              },
+            },
+          }}
+        />
+      </body>
     </html>
   );
 }
