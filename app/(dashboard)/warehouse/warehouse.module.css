@@ -1,0 +1,7 @@
+.stack-cell { display: flex; flex-direction: column; gap: 3px; }
+.stack-cell .primary { color: var(--ink); font-size: 14px; }
+.stack-cell .secondary { color: var(--gray-600); font-size: 13px; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-8) 0; text-align: center; }
+.empty-state svg { width: 40px; height: 40px; color: var(--gray-300); }
+.empty-state .title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }

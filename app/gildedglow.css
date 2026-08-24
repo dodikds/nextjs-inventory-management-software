@@ -410,6 +410,15 @@ button { font-family: inherit; }
 .gg-row-action { color: var(--gray-400); cursor: pointer; padding: 6px; border-radius: var(--r-sm); }
 .gg-row-action:hover { color: var(--ink); background: var(--gray-100); }
 
+/* row actions (table row Edit/View/Delete icon buttons) */
+.row-acts { display: inline-flex; align-items: center; gap: 6px; }
+.row-acts button, .row-acts a { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); border: none; background: transparent; cursor: pointer; transition: background .15s; }
+.row-acts button:hover, .row-acts a:hover { background: var(--gray-100); }
+.row-acts svg { width: 17px; height: 17px; }
+.act-view { color: var(--success-fg); }
+.act-edit { color: var(--info-fg); }
+.act-del { color: var(--danger); }
+
 /* row-action dropdown menu */
 .gg-menu {
   min-width: 196px; background: var(--surface); border: 1px solid var(--gray-200);
@@ -427,6 +436,7 @@ button { font-family: inherit; }
 .gg-pagination .gg-spacer { flex: 1; }
 .gg-page-btn { width: 38px; height: 38px; border-radius: var(--r-md); border: 1px solid var(--gray-200); background: var(--surface); color: var(--gray-600); display: grid; place-items: center; cursor: pointer; transition: .14s; }
 .gg-page-btn:hover { background: var(--gray-50); border-color: var(--gray-300); color: var(--ink); }
+.gg-page-btn:disabled { opacity: .5; pointer-events: none; }
 .gg-page-btn svg { width: 17px; height: 17px; }
 .gg-perpage { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .gg-perpage .gg-select { width: 78px; height: 38px; }
