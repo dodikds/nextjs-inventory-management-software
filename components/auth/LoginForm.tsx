@@ -4,7 +4,13 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import toast from "react-hot-toast";
+import { z } from "zod";
 import styles from "@/app/login.module.css";
+
+const loginSchema = z.object({
+  email: z.email("Enter a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
 
 export default function LoginForm() {
   const router = useRouter();
@@ -14,28 +20,40 @@ export default function LoginForm() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      setIsSubmitting(false);
-      toast.error("Invalid email or password");
+    const parsed = loginSchema.safeParse({ email, password });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0].message);
       return;
     }
 
-    router.push("/dashboard");
-    router.refresh();
+    setIsSubmitting(true);
+
+    try {
+      const result = await signIn("credentials", {
+        email: parsed.data.email,
+        password: parsed.data.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error("Invalid email or password");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <div className={styles["auth-card"]}>
       <h1 className={styles["auth-title"]}>Sign In</h1>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         <div className={styles["auth-field"]}>
           <div className={styles["auth-label-row"]}>
             <label className={styles["auth-label"]} htmlFor="email">
