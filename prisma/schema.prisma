@@ -36,3 +36,19 @@ model Warehouse {
 
   @@map("warehouses")
 }
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(120)
+  email     String   @unique @db.VarChar(190)
+  phone     String   @db.VarChar(32)
+  country   String   @db.VarChar(80)
+  city      String   @db.VarChar(80)
+  address   String   @db.VarChar(255)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("suppliers")
+}

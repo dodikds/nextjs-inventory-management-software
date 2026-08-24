@@ -462,7 +462,7 @@ button { font-family: inherit; }
 .gg-modal-foot { display: flex; justify-content: flex-end; gap: var(--sp-3); padding: var(--sp-5) var(--sp-6); border-top: 1px solid var(--gray-150); background: var(--gray-50); }
 
 /* ================================================================ FOOTER */
-.dash-foot { color: var(--gray-500); font-size: 13px; padding: var(--sp-8) 0 var(--sp-4); }
+.dash-foot { color: var(--gray-500); font-size: 13px; padding: var(--sp-8) 0 var(--sp-4); margin-left: 35px; }
 .dash-foot a { font-weight: 600; }
 
 /* ============================================================== UTILITIES */
