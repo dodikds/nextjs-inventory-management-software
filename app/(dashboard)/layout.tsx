@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
+import { SessionProvider } from "next-auth/react";
 import { auth } from "@/auth";
 import AppShell from "@/components/layout/AppShell";
 import Sidebar from "@/components/layout/Sidebar";
@@ -14,13 +15,15 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   return (
-    <AppShell>
-      <Sidebar />
-      <div className="gg-main">
-        <Topbar />
-        <main className="gg-content">{children}</main>
-        <Footer />
-      </div>
-    </AppShell>
+    <SessionProvider session={session}>
+      <AppShell>
+        <Sidebar />
+        <div className="gg-main">
+          <Topbar />
+          <main className="gg-content">{children}</main>
+          <Footer />
+        </div>
+      </AppShell>
+    </SessionProvider>
   );
 }
