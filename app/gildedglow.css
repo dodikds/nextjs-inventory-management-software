@@ -114,6 +114,8 @@ button { font-family: inherit; }
 
 /* ============================================================= TYPE SCALE */
 .gg-page-title  { font-family: var(--font-display); font-size: var(--text-page); font-weight: 700; color: var(--ink); letter-spacing: -.02em; line-height: 1.15; }
+.page-head { display: flex; align-items: center; margin-bottom: var(--sp-6); }
+.page-head .gg-page-title { flex: 1; }
 .gg-section-title { font-family: var(--font-display); font-size: var(--text-section); font-weight: 600; color: var(--ink); }
 .gg-card-title  { font-family: var(--font-display); font-size: var(--text-card); font-weight: 600; color: var(--ink); }
 .gg-label       { font-size: var(--text-label); font-weight: 600; color: var(--gray-700); letter-spacing: .005em; }
