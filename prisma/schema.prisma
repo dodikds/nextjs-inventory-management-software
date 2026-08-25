@@ -8,18 +8,32 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   firstName   String
   lastName    String
-  email       String   @unique
+  email       String    @unique
   password    String
   phoneNumber String?
   image       String?
   role        String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("users")
+}
+
+// Backs the Role dropdown on the Users create/edit form. `User.role` stays a
+// plain string (matching the value stored here and the keys ROLE_PERMISSIONS
+// in lib/permissions.ts already expects) rather than a foreign key, since no
+// Roles/Permissions CRUD exists yet to manage this table's rows themselves.
+model Role {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("roles")
 }
 
 model Warehouse {

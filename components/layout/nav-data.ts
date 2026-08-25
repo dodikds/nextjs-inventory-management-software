@@ -88,7 +88,7 @@ export const NAV: NavEntry[] = [
     children: [
       { label: "Customers", href: "/customers" },
       { label: "Suppliers", href: "/peoples/suppliers" },
-      { label: "Users", href: "/peoples/users" },
+      { label: "Users", href: "/users" },
     ],
   },
   { type: "link", label: "Roles/Permissions", href: "/roles", icon: ShieldCheck },

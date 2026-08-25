@@ -1,3 +1,11 @@
+// Builds the two-letter initials shown in the Users list's .ppl-ava badge
+// (e.g. "Raihan Shak" -> "RS"), matching design/Users.html's mockup script.
+export function getInitials(firstName: string, lastName: string): string {
+  const first = firstName.trim().charAt(0);
+  const last = lastName.trim().charAt(0);
+  return `${first}${last}`.toUpperCase();
+}
+
 export function formatDateTimeChip(date: Date): { time: string; date: string } {
   const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   const day = date.toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });

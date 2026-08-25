@@ -1,0 +1,28 @@
+/* Ported from Users.html's own <style> block — only the rules that
+   actually belong to this page. .row-acts and .page-head are already
+   promoted to gildedglow.css (identical across many design files), and
+   .dash-foot is rendered once by the shared dashboard Footer, not per-page. */
+.ppl-name { display: flex; align-items: center; gap: var(--sp-3); }
+.ppl-ava {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--gold-500), var(--gold-700));
+  color: #fff; display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; flex: none;
+}
+
+.ppl-cell { display: flex; flex-direction: column; gap: 3px; }
+.ppl-cell .nm { font-family: var(--font-display); font-weight: 600; color: var(--gold-700); font-size: 14px; }
+.ppl-cell .em { color: var(--gray-600); font-size: 13px; }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-8) 0; text-align: center; }
+.empty-state svg { width: 40px; height: 40px; color: var(--gray-300); }
+.empty-state .title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }
+
+.skeleton-bar {
+  height: 14px; border-radius: var(--r-sm); background: var(--gray-150);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}

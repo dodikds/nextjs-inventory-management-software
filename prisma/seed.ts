@@ -119,8 +119,22 @@ async function seedDefaultCustomer() {
   console.log(`Seeded default customer: ${customer.name}`);
 }
 
+// Seeds the fixed set of role names the Users create/edit form's Role
+// dropdown reads from (see app/(dashboard)/users/queries.ts::getRoles).
+// "admin" must exist since seedAdminUser() assigns it above.
+const ROLE_SEED_DATA = ["admin", "manager", "cashier"] as const;
+
+async function seedRoles() {
+  for (const name of ROLE_SEED_DATA) {
+    await dbPrisma.role.upsert({ where: { name }, update: {}, create: { name } });
+  }
+
+  console.log(`Seeded ${ROLE_SEED_DATA.length} roles`);
+}
+
 async function main() {
   await seedAdminUser();
+  await seedRoles();
   await seedSuppliers();
   await seedDefaultCustomer();
 }
