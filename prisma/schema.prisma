@@ -52,3 +52,27 @@ model Supplier {
   @@index([createdAt])
   @@map("suppliers")
 }
+
+model Customer {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phoneNumber String
+  dateOfBirth DateTime?
+  country     String
+  city        String
+  address     String
+  // Marks the single protected "direct-customer" walk-in record the POS
+  // falls back to when no specific customer is selected. Used instead of
+  // matching on name/email (which are editable and not guaranteed unique)
+  // so the delete action and the list UI can reliably identify the record
+  // to protect regardless of what it's been renamed to.
+  isDefault   Boolean   @default(false)
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("customers")
+}

@@ -93,9 +93,36 @@ async function seedSuppliers() {
   console.log(`Seeded ${created} suppliers`);
 }
 
+// The POS falls back to this record when no specific customer is selected,
+// so it must always exist. Looked up by `isDefault` rather than a unique
+// email/name (Customer has neither constraint) since those fields stay
+// editable and aren't guaranteed unique.
+async function seedDefaultCustomer() {
+  const existing = await dbPrisma.customer.findFirst({ where: { isDefault: true } });
+  if (existing) {
+    console.log(`Default customer already exists: ${existing.name}`);
+    return;
+  }
+
+  const customer = await dbPrisma.customer.create({
+    data: {
+      name: "direct-customer",
+      email: "customer@gildedglow.com",
+      phoneNumber: "123456789",
+      country: "N/A",
+      city: "N/A",
+      address: "N/A",
+      isDefault: true,
+    },
+  });
+
+  console.log(`Seeded default customer: ${customer.name}`);
+}
+
 async function main() {
   await seedAdminUser();
   await seedSuppliers();
+  await seedDefaultCustomer();
 }
 
 main()

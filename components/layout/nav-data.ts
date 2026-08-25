@@ -86,7 +86,7 @@ export const NAV: NavEntry[] = [
     label: "Peoples",
     icon: Users,
     children: [
-      { label: "Customers", href: "/peoples/customers" },
+      { label: "Customers", href: "/customers" },
       { label: "Suppliers", href: "/peoples/suppliers" },
       { label: "Users", href: "/peoples/users" },
     ],
