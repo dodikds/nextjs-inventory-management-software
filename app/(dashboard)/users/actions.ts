@@ -140,6 +140,76 @@ export async function createUser(_prevState: UserFormState, formData: FormData):
   redirect("/users?flash=created");
 }
 
+// `id` is bound server-side via `updateUser.bind(null, id)` in the edit page
+// (a Server Component, so `id` comes from the trusted URL route param)
+// rather than read from `formData` — a hidden `<input name="id">` would be
+// part of the rendered HTML and editable via devtools. The bound function's
+// signature `(prevState, formData) => ...` is exactly what useActionState
+// expects, so this composes with it directly.
+export async function updateUser(id: string, _prevState: UserFormState, formData: FormData): Promise<UserFormState> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_users")) {
+    return NO_PERMISSION_STATE;
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { message: parsedId.error.issues[0].message };
+  }
+
+  const parsed = userEditSchema.safeParse(parseUserFormData(formData));
+  if (!parsed.success) {
+    return { errors: fieldErrorsFrom(parsed.error), message: "Please fix the errors below" };
+  }
+
+  const { firstName, lastName, email, phoneNumber, role, password } = parsed.data;
+
+  const roleExists = await dbPrisma.role.findUnique({ where: { name: role } });
+  if (!roleExists) {
+    return { errors: { role: "Please choose a valid role" }, message: "Please fix the errors below" };
+  }
+
+  const existing = await dbPrisma.user.findFirst({ where: { id: parsedId.data, deletedAt: null } });
+  if (!existing) {
+    return { message: "User not found" };
+  }
+
+  // Validate the image's type up front — before any database write — so a
+  // rejected upload never leaves the record half-updated.
+  const imageFile = formData.get("image");
+  const hasImage = imageFile instanceof File && imageFile.size > 0;
+  if (hasImage && !ALLOWED_IMAGE_TYPES[(imageFile as File).type]) {
+    return { message: "Please upload a JPG, PNG, WEBP, or GIF image" };
+  }
+
+  const data: Prisma.UserUpdateInput = { firstName, lastName, email, phoneNumber, role };
+
+  // A blank password field means "keep the existing password" — the
+  // existing hash is never read, re-displayed, or touched unless the admin
+  // actually typed a new one, which is only ever re-hashed here, never
+  // stored or returned in plain text.
+  if (password !== "") {
+    data.password = await bcrypt.hash(password, 10);
+  }
+
+  if (hasImage) {
+    data.image = await saveAvatar(parsedId.data, imageFile as File);
+  }
+
+  try {
+    await dbPrisma.user.update({ where: { id: parsedId.data }, data });
+  } catch (error) {
+    if (isDuplicateEmailError(error)) {
+      return { errors: { email: "That email is already in use" }, message: "Please fix the errors below" };
+    }
+    throw error;
+  }
+
+  revalidatePath("/users");
+  revalidatePath(`/users/${parsedId.data}/edit`);
+  redirect("/users?flash=updated");
+}
+
 export type UserActionResult = { success: true } | { success: false; error: string };
 
 // Called directly as `deleteUser(id)` from the row's delete button rather
