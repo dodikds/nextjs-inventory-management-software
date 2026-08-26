@@ -1,0 +1,64 @@
+import type { Prisma } from "@prisma/client";
+import { dbPrisma } from "@/lib/db";
+
+export const PER_PAGE_OPTIONS = [10, 25, 50] as const;
+export const DEFAULT_PER_PAGE: (typeof PER_PAGE_OPTIONS)[number] = 10;
+
+export function parsePerPage(value: string | undefined): (typeof PER_PAGE_OPTIONS)[number] {
+  const parsed = Number(value);
+  return (PER_PAGE_OPTIONS as readonly number[]).includes(parsed)
+    ? (parsed as (typeof PER_PAGE_OPTIONS)[number])
+    : DEFAULT_PER_PAGE;
+}
+
+export function parsePage(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+}
+
+type GetBrandsParams = {
+  q?: string;
+  page: number;
+  perPage: number;
+};
+
+export async function getBrands({ q, page, perPage }: GetBrandsParams) {
+  const where: Prisma.BrandWhereInput = {
+    deletedAt: null,
+    ...(q ? { name: { contains: q } } : {}),
+  };
+
+  // Interactive transaction so the count and the findMany run together
+  // (consistent snapshot) while still letting the count clamp an
+  // out-of-range page before it's used to compute "skip" — a stale
+  // bookmark or hand-edited URL otherwise produces a "skip" past the end
+  // of the result set and a nonsensical range display.
+  const { brands, total, page: safePage } = await dbPrisma.$transaction(async (tx) => {
+    const total = await tx.brand.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const safePage = Math.min(Math.max(page, 1), totalPages);
+
+    const brands = await tx.brand.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (safePage - 1) * perPage,
+      take: perPage,
+    });
+
+    return { brands, total, page: safePage };
+  });
+
+  return { brands, total, page: safePage };
+}
+
+// TODO: once a Product model with a `brandId` foreign key exists, check for
+// referencing rows here (e.g. dbPrisma.product.count({ where: { brandId: id } })
+// > 0) and return true if any exist. Until then there's nothing to check
+// against, so every brand is currently deletable — but deleteBrand() already
+// calls this seam, so wiring up the real check later only means editing this
+// one function. Mirrors the same seam Customers uses (see
+// app/(dashboard)/customers/queries.ts::isCustomerInUse).
+export async function isBrandInUse(id: string): Promise<boolean> {
+  void id;
+  return false;
+}

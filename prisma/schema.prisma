@@ -67,6 +67,19 @@ model Supplier {
   @@map("suppliers")
 }
 
+model Brand {
+  id        String    @id @default(cuid())
+  name      String
+  logo      String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("brands")
+}
+
 model Customer {
   id          String    @id @default(cuid())
   name        String

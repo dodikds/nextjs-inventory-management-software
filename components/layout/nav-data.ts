@@ -45,7 +45,7 @@ export const NAV: NavEntry[] = [
     children: [
       { label: "Products", href: "/products" },
       { label: "Product Categories", href: "/products/categories" },
-      { label: "Brands", href: "/products/brands" },
+      { label: "Brands", href: "/brands" },
       { label: "Units", href: "/products/units" },
       { label: "Base Units", href: "/products/base-units" },
       { label: "Print Barcode", href: "/products/print-barcode" },
