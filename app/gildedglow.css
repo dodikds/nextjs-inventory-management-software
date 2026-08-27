@@ -461,6 +461,35 @@ button { font-family: inherit; }
 .gg-modal-body { padding: var(--sp-6); display: flex; flex-direction: column; gap: var(--sp-5); }
 .gg-modal-foot { display: flex; justify-content: flex-end; gap: var(--sp-3); padding: var(--sp-5) var(--sp-6); border-top: 1px solid var(--gray-150); background: var(--gray-50); }
 
+/* ============================================================ MASTER DATA
+   Shared by every "name + logo, list + create/edit modal" module (Brands,
+   Product Categories, Units, ...) — see components/master-data/. Kept here
+   instead of a per-page CSS module so a single generic modal component can
+   reference plain class names without importing a page-specific module. */
+.cat-thumb { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--gray-200); background: linear-gradient(135deg, #f6e9cf, #e0b65f); display: grid; place-items: center; overflow: hidden; flex: none; }
+.cat-thumb svg { width: 20px; height: 20px; color: var(--gold-700); }
+.cat-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+.act-btn { width: 36px; height: 36px; border-radius: var(--r-sm); border: none; background: transparent; display: grid; place-items: center; cursor: pointer; transition: background .14s; }
+.act-btn svg { width: 18px; height: 18px; }
+.act-btn.act-edit:hover { background: var(--info-bg); }
+.act-btn.act-del:hover { background: var(--danger-bg); }
+
+/* logo uploader inside the create/edit modal */
+.logo-drop { position: relative; width: 116px; height: 116px; border: 1px solid var(--gray-200); border-radius: var(--r-md); background: var(--gray-50); display: grid; place-items: center; overflow: hidden; }
+.logo-drop > .ph { width: 46px; height: 46px; color: var(--gray-300); }
+.logo-drop img { width: 100%; height: 100%; object-fit: cover; }
+.logo-edit { position: absolute; top: -10px; right: -10px; width: 30px; height: 30px; border-radius: 50%; background: var(--surface); border: 1px solid var(--gray-200); box-shadow: var(--shadow-sm); display: grid; place-items: center; cursor: pointer; color: var(--info); }
+.logo-edit svg { width: 15px; height: 15px; }
+.file-input { display: none; }
+
+/* Field validation states — the design system doesn't define an error state
+   for .gg-input/.gg-select on its own. */
+.is-error { border-color: var(--danger) !important; }
+.is-error:focus { box-shadow: 0 0 0 3px rgba(213, 64, 47, 0.25) !important; }
+.field-error { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--danger-fg); }
+.field-error svg { width: 14px; height: 14px; flex: none; }
+
 /* ================================================================ FOOTER */
 .dash-foot { color: var(--gray-500); font-size: 13px; padding: var(--sp-8) 0 var(--sp-4); margin-left: 35px; }
 .dash-foot a { font-weight: 600; }

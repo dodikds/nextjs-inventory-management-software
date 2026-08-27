@@ -44,7 +44,7 @@ export const NAV: NavEntry[] = [
     icon: Boxes,
     children: [
       { label: "Products", href: "/products" },
-      { label: "Product Categories", href: "/products/categories" },
+      { label: "Product Categories", href: "/product-categories" },
       { label: "Brands", href: "/brands" },
       { label: "Units", href: "/products/units" },
       { label: "Base Units", href: "/products/base-units" },

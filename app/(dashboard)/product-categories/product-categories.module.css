@@ -1,0 +1,15 @@
+/* Page-specific styles only — .cat-thumb, .act-btn, .logo-drop, .is-error,
+   .field-error etc. are shared across every master-data module and live in
+   app/gildedglow.css instead (see components/master-data/). */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-8) 0; text-align: center; }
+.empty-state svg { width: 40px; height: 40px; color: var(--gray-300); }
+.empty-state .title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }
+
+.skeleton-bar {
+  height: 14px; border-radius: var(--r-sm); background: var(--gray-150);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
