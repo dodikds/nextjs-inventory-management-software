@@ -1,0 +1,5 @@
+/* Ported from Purchases.html's own <style> block (.action-cell / its .gg-menu
+   rule) — ownership moved here since this component is what actually opens
+   the menu. */
+.action-cell { position: relative; }
+.menu { position: absolute; right: 44px; top: 6px; z-index: 25; }
