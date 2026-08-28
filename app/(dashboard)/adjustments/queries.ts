@@ -68,3 +68,7 @@ export async function getAdjustmentById(id: string) {
     },
   });
 }
+
+export async function getWarehouseOptions() {
+  return dbPrisma.warehouse.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}
