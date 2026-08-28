@@ -8,6 +8,7 @@ import {
   searchProductsForPurchase,
   getProductStocksForWarehouse,
   createPurchase,
+  updatePurchase,
   type PurchaseProductSearchResult,
 } from "@/app/(dashboard)/purchases/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
@@ -37,10 +38,27 @@ type PurchaseItemState = {
   unit: string;
 };
 
+// Pre-filled form state for edit mode — see
+// app/(dashboard)/purchases/[id]/edit/page.tsx, which builds this from the
+// stored Purchase and its items.
+export type PurchaseFormInitialData = {
+  id: string;
+  date: string;
+  warehouseId: string;
+  supplierId: string;
+  items: PurchaseItemState[];
+  orderTaxPercent: string;
+  discount: string;
+  shipping: string;
+  status: PurchaseStatus;
+  notes: string;
+};
+
 type PurchaseFormProps = {
   warehouses: OptionItem[];
   suppliers: OptionItem[];
   units: OptionItem[];
+  initialData?: PurchaseFormInitialData;
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -64,19 +82,20 @@ function lineTotals(item: PurchaseItemState) {
   });
 }
 
-export default function PurchaseForm({ warehouses, suppliers, units }: PurchaseFormProps) {
+export default function PurchaseForm({ warehouses, suppliers, units, initialData }: PurchaseFormProps) {
   const router = useRouter();
+  const isEditing = initialData !== undefined;
 
-  const [date, setDate] = useState(todayInputValue);
-  const [warehouseId, setWarehouseId] = useState("");
-  const [supplierId, setSupplierId] = useState("");
-  const [items, setItems] = useState<PurchaseItemState[]>([]);
+  const [date, setDate] = useState(initialData?.date ?? todayInputValue);
+  const [warehouseId, setWarehouseId] = useState(initialData?.warehouseId ?? "");
+  const [supplierId, setSupplierId] = useState(initialData?.supplierId ?? "");
+  const [items, setItems] = useState<PurchaseItemState[]>(initialData?.items ?? []);
 
-  const [orderTaxPercent, setOrderTaxPercent] = useState("0.00");
-  const [discount, setDiscount] = useState("0.00");
-  const [shipping, setShipping] = useState("0.00");
-  const [status, setStatus] = useState<PurchaseStatus>("RECEIVED");
-  const [notes, setNotes] = useState("");
+  const [orderTaxPercent, setOrderTaxPercent] = useState(initialData?.orderTaxPercent ?? "0.00");
+  const [discount, setDiscount] = useState(initialData?.discount ?? "0.00");
+  const [shipping, setShipping] = useState(initialData?.shipping ?? "0.00");
+  const [status, setStatus] = useState<PurchaseStatus>(initialData?.status ?? "RECEIVED");
+  const [notes, setNotes] = useState(initialData?.notes ?? "");
 
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
@@ -191,7 +210,7 @@ export default function PurchaseForm({ warehouses, suppliers, units }: PurchaseF
     e.preventDefault();
 
     startSaveTransition(async () => {
-      const result = await createPurchase({
+      const payload = {
         date,
         warehouseId,
         supplierId,
@@ -210,15 +229,17 @@ export default function PurchaseForm({ warehouses, suppliers, units }: PurchaseF
         shipping,
         status,
         notes: notes || undefined,
-      });
+      };
+
+      const result = isEditing ? await updatePurchase(initialData.id, payload) : await createPurchase(payload);
 
       if (!result.success) {
         toast.error(result.message);
         return;
       }
 
-      toast.success("Purchase created");
-      router.push("/purchases");
+      toast.success(isEditing ? "Purchase updated" : "Purchase created");
+      router.push(isEditing ? `/purchases/${result.id}` : "/purchases");
     });
   }
 
@@ -229,7 +250,7 @@ export default function PurchaseForm({ warehouses, suppliers, units }: PurchaseF
     ) {
       return;
     }
-    router.push("/purchases");
+    router.push(isEditing ? `/purchases/${initialData.id}` : "/purchases");
   }
 
   const isValid = date !== "" && warehouseId !== "" && supplierId !== "" && items.length > 0;
@@ -527,7 +548,7 @@ export default function PurchaseForm({ warehouses, suppliers, units }: PurchaseF
 
         <div className="gg-form-actions">
           <button className="gg-btn gg-btn--primary" type="submit" disabled={!isValid || isSaving}>
-            <Check /> {isSaving ? "Saving..." : "Save"}
+            <Check /> {isSaving ? (isEditing ? "Updating..." : "Saving...") : isEditing ? "Update" : "Save"}
           </button>
           <button className="gg-btn gg-btn--secondary" type="button" onClick={handleCancel} disabled={isSaving}>
             Cancel

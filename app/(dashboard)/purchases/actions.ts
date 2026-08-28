@@ -7,8 +7,11 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
-import { adjustProductStock } from "@/lib/stock";
+import { adjustProductStock, computeStockDeltas, InsufficientStockError } from "@/lib/stock";
 import { purchaseSchema } from "@/lib/validation/purchase";
+import { getProductStockMap } from "./queries";
+
+const idSchema = z.string().trim().min(1, "Invalid purchase id");
 
 const searchSchema = z.object({
   query: z.string().trim().min(1).max(190),
@@ -102,20 +105,10 @@ export async function getProductStocksForWarehouse(
     return {};
   }
 
-  const stocks = await dbPrisma.productStock.findMany({
-    where: { productId: { in: parsed.data.productIds }, warehouseId: parsed.data.warehouseId },
-    select: { productId: true, quantity: true },
-  });
-
-  const result: Record<string, number> = {};
-  for (const productId of parsed.data.productIds) {
-    result[productId] = 0;
-  }
-  for (const stock of stocks) {
-    result[stock.productId] = stock.quantity;
-  }
-  return result;
+  return getProductStockMap(parsed.data.productIds, parsed.data.warehouseId);
 }
+
+class PurchaseNotFoundError extends Error {}
 
 function isDuplicateReferenceError(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") {
@@ -272,4 +265,187 @@ export async function createPurchase(input: unknown): Promise<CreatePurchaseResu
   }
 
   return { success: true, id: purchaseId };
+}
+
+export type UpdatePurchaseResult = { success: true; id: string } | { success: false; message: string };
+
+// Reuses PurchaseForm in edit mode (pre-filled — see
+// app/(dashboard)/purchases/[id]/edit/page.tsx) and the same
+// validate-then-recompute path as createPurchase above. The one thing it
+// does differently — the careful part — is how it touches stock: it never
+// re-runs createPurchase's "add stock for every Received line" logic,
+// since the purchase being edited may already have added stock for its
+// *old* quantities; doing that again would double it. See the
+// computeStockDeltas call below for how the difference is computed.
+export async function updatePurchase(id: string, input: unknown): Promise<UpdatePurchaseResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_purchases")) {
+    return { success: false, message: "You don't have permission to manage purchases" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid purchase" };
+  }
+
+  const parsed = purchaseSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const { date, warehouseId, supplierId, items, orderTax, discount, shipping, status, notes } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  // Same re-validation as createPurchase — the submitted ids still arrive
+  // as plain values from a client call.
+  const [warehouse, supplier, products] = await Promise.all([
+    dbPrisma.warehouse.findFirst({ where: { id: warehouseId, deletedAt: null } }),
+    dbPrisma.supplier.findUnique({ where: { id: supplierId } }),
+    dbPrisma.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) }, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!warehouse) {
+    return { success: false, message: "Please choose a valid warehouse" };
+  }
+  if (!supplier) {
+    return { success: false, message: "Please choose a valid supplier" };
+  }
+  if (products.length !== items.length) {
+    return { success: false, message: "One or more products are no longer available" };
+  }
+
+  const itemTotals = items.map((item) =>
+    calculateLineTotals({
+      unitCost: item.unitCost,
+      quantity: item.quantity,
+      discountType: item.discountType,
+      discount: item.discount,
+      taxType: item.taxType,
+      taxRate: item.orderTax,
+    }),
+  );
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: itemTotals.map((total) => total.subtotal),
+    orderTaxRate: orderTax,
+    discount,
+    shipping,
+  });
+
+  let oldProductIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      // Read the purchase's state as it was before this save — both for
+      // the 404 check and as the "old" side of the stock reconciliation
+      // below — inside the same transaction as the writes that follow, so
+      // nothing else can change it in between.
+      const existing = await tx.purchase.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new PurchaseNotFoundError();
+      }
+      oldProductIds = existing.items.map((item) => item.productId);
+
+      // Simplest correct way to let items be arbitrarily added, removed,
+      // or edited between saves: replace the whole set rather than diffing
+      // and patching individual PurchaseItem rows. The reference itself is
+      // never regenerated on edit.
+      await tx.purchaseItem.deleteMany({ where: { purchaseId: parsedId.data } });
+
+      await tx.purchase.update({
+        where: { id: parsedId.data },
+        data: {
+          warehouseId,
+          supplierId,
+          date: parsedDate,
+          status,
+          orderTax,
+          discount,
+          shipping,
+          grandTotal: orderTotals.grandTotal.toFixed(2),
+          notes: notes || null,
+          items: {
+            create: items.map((item, index) => ({
+              productId: item.productId,
+              netUnitCost: item.unitCost,
+              quantity: item.quantity,
+              discountType: item.discountType,
+              discount: item.discount,
+              taxType: item.taxType,
+              orderTax: item.orderTax,
+              unit: item.unit,
+              subtotal: itemTotals[index].subtotal.toFixed(2),
+            })),
+          },
+        },
+      });
+
+      // Stock reconciliation. A Purchase only ever contributed stock while
+      // its status was RECEIVED, so "what did the old state contribute" is
+      // the old item quantities if `existing.status` was RECEIVED, or
+      // nothing at all otherwise — and likewise for the new state against
+      // `status`. computeStockDeltas nets those two against each other per
+      // (warehouse, product): a plain quantity change nets to the
+      // difference, a status flip in either direction nets to the full old
+      // or new amount, an item added or removed nets to a pure positive or
+      // negative, and — because old/new warehouse are passed separately —
+      // even the warehouse itself changing is handled correctly (the old
+      // warehouse is reversed, the new one is applied, rather than being
+      // netted against each other). This is the only place this action
+      // touches stock; createPurchase's "add stock for every Received
+      // line" is never called again here.
+      const oldQuantities =
+        existing.status === "RECEIVED"
+          ? existing.items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
+          : [];
+      const newQuantities =
+        status === "RECEIVED" ? items.map((item) => ({ productId: item.productId, quantity: item.quantity })) : [];
+
+      const deltas = computeStockDeltas({
+        oldWarehouseId: existing.warehouseId,
+        oldQuantities,
+        newWarehouseId: warehouseId,
+        newQuantities,
+      });
+      for (const delta of deltas) {
+        await adjustProductStock(tx, delta);
+      }
+    });
+  } catch (error) {
+    if (error instanceof PurchaseNotFoundError) {
+      return { success: false, message: "Purchase not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `${product?.name ?? "That product"} doesn't have enough stock in ${warehouseRow?.name ?? "that warehouse"} for this change — some of it may already be committed elsewhere`,
+      };
+    }
+    throw error;
+  }
+
+  // Revalidate every product that either contributed stock before this
+  // edit or does now — the union covers items that were added, removed,
+  // or just changed quantity.
+  revalidatePath("/purchases");
+  revalidatePath(`/purchases/${parsedId.data}`);
+  revalidatePath("/products");
+  const affectedProductIds = new Set([...oldProductIds, ...items.map((item) => item.productId)]);
+  for (const productId of affectedProductIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true, id: parsedId.data };
 }

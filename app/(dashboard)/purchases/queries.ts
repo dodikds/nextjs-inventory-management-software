@@ -110,3 +110,29 @@ export async function getPurchaseById(id: string) {
     },
   });
 }
+
+// Shared by searchProductsForPurchase/getProductStocksForWarehouse in
+// ./actions.ts (called from the client while the form is open) and by the
+// edit page (a plain server-component data fetch, no need to go through a
+// "use server" action for that) — one query, two call sites.
+export async function getProductStockMap(
+  productIds: string[],
+  warehouseId: string,
+): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const productId of productIds) {
+    result[productId] = 0;
+  }
+  if (productIds.length === 0 || !warehouseId) {
+    return result;
+  }
+
+  const stocks = await dbPrisma.productStock.findMany({
+    where: { productId: { in: productIds }, warehouseId },
+    select: { productId: true, quantity: true },
+  });
+  for (const stock of stocks) {
+    result[stock.productId] = stock.quantity;
+  }
+  return result;
+}
