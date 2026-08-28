@@ -1,0 +1,10 @@
+/* Ported from Create Product.html's own <style> block. */
+.create-layout { display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-10); }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-6); align-content: start; }
+.field-grid .span-2 { grid-column: span 2; }
+.stock-rail { display: flex; flex-direction: column; gap: var(--sp-5); border-left: 1px solid var(--gray-150); padding-left: var(--sp-8); }
+
+@media (max-width: 900px) {
+  .create-layout { grid-template-columns: 1fr; }
+  .stock-rail { border-left: none; padding-left: 0; border-top: 1px solid var(--gray-150); padding-top: var(--sp-6); }
+}

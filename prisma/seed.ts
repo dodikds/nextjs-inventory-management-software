@@ -132,9 +132,22 @@ async function seedRoles() {
   console.log(`Seeded ${ROLE_SEED_DATA.length} roles`);
 }
 
+// Seeds the fixed set of unit names the Products create/edit form's Product
+// Unit dropdown reads from (see app/(dashboard)/products/queries.ts::getUnits).
+const UNIT_SEED_DATA = ["Piece", "Kilogram", "Meter"] as const;
+
+async function seedUnits() {
+  for (const name of UNIT_SEED_DATA) {
+    await dbPrisma.unit.upsert({ where: { name }, update: {}, create: { name } });
+  }
+
+  console.log(`Seeded ${UNIT_SEED_DATA.length} units`);
+}
+
 async function main() {
   await seedAdminUser();
   await seedRoles();
+  await seedUnits();
   await seedSuppliers();
   await seedDefaultCustomer();
 }

@@ -48,6 +48,8 @@ model Warehouse {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  stocks ProductStock[]
+
   @@map("warehouses")
 }
 
@@ -62,6 +64,8 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  stocks ProductStock[]
+
   @@index([name])
   @@index([createdAt])
   @@map("suppliers")
@@ -74,6 +78,8 @@ model Brand {
   deletedAt DateTime?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  products Product[]
 
   @@index([name])
   @@index([createdAt])
@@ -88,9 +94,108 @@ model Category {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  products Product[]
+
   @@index([name])
   @@index([createdAt])
   @@map("categories")
+}
+
+// Backs the Product Unit dropdown on the Products create/edit form, the
+// same way Role backs the Role dropdown on Users — Product.productUnit
+// stores the unit's `name` as a plain string (not a foreign key) since
+// there's no Units CRUD to manage this table's rows yet either.
+model Unit {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("units")
+}
+
+enum TaxType {
+  EXCLUSIVE
+  INCLUSIVE
+}
+
+enum StockStatus {
+  RECEIVED
+  PENDING
+  ORDERED
+}
+
+model Product {
+  id                 String    @id @default(cuid())
+  name               String
+  code               String    @unique
+  price              Decimal   @db.Decimal(12, 2)
+  categoryId         String
+  category           Category  @relation(fields: [categoryId], references: [id])
+  brandId            String
+  brand              Brand     @relation(fields: [brandId], references: [id])
+  // Plain string (matching the Unit table's `name`), not a foreign key —
+  // see the Unit model's comment above.
+  productUnit        String
+  stockAlert         Int?
+  orderTax           Decimal?  @db.Decimal(5, 2)
+  taxType            TaxType
+  quantityLimitation Int?
+  notes              String?   @db.Text
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  images ProductImage[]
+  stocks ProductStock[]
+
+  @@index([name])
+  @@index([code])
+  @@index([createdAt])
+  @@map("products")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  path      String
+  // The list thumbnail and the first image shown on the View page are
+  // whichever row sorts first by (sortOrder, createdAt) — not a separate
+  // "isPrimary" flag, so reordering is just an update to this column.
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// One row per (product, warehouse) — a current-quantity snapshot, not a
+// transaction ledger. Created once at product-create time from the "Add
+// Stock" form; see app/(dashboard)/products/actions.ts for why edit
+// deliberately never re-runs that insert (it would inflate quantity on
+// every save). Real stock movements belong to the separate Adjustments
+// module, not this table's create/update path.
+model ProductStock {
+  id          String      @id @default(cuid())
+  productId   String
+  product     Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse   @relation(fields: [warehouseId], references: [id])
+  // Nullable + SetNull (unlike the required field on the create form) so a
+  // supplier hard-deleted later (Suppliers has no soft-delete or "in use"
+  // guard today) can't leave this row's FK dangling or block that delete.
+  supplierId  String?
+  supplier    Supplier?   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  quantity    Int         @default(0)
+  status      StockStatus @default(RECEIVED)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([productId, warehouseId])
+  @@index([productId])
+  @@index([warehouseId])
+  @@map("product_stocks")
 }
 
 model Customer {

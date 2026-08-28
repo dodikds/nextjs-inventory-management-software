@@ -51,14 +51,7 @@ export async function getBrands({ q, page, perPage }: GetBrandsParams) {
   return { brands, total, page: safePage };
 }
 
-// TODO: once a Product model with a `brandId` foreign key exists, check for
-// referencing rows here (e.g. dbPrisma.product.count({ where: { brandId: id } })
-// > 0) and return true if any exist. Until then there's nothing to check
-// against, so every brand is currently deletable — but deleteBrand() already
-// calls this seam, so wiring up the real check later only means editing this
-// one function. Mirrors the same seam Customers uses (see
-// app/(dashboard)/customers/queries.ts::isCustomerInUse).
 export async function isBrandInUse(id: string): Promise<boolean> {
-  void id;
-  return false;
+  const count = await dbPrisma.product.count({ where: { brandId: id, deletedAt: null } });
+  return count > 0;
 }
