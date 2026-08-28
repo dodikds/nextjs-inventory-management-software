@@ -1,9 +1,22 @@
-import { Decimal } from "@prisma/client/runtime/library";
+import Decimal from "decimal.js";
 
 // Shared by Purchases (and, later, Sales — see AGENTS.md) so both modules
-// compute money the same way. Never inline this math into a form or server
-// action; add a case here instead. All money in and out is Decimal, never
-// float, per the project's core rule.
+// compute money the same way, including live, client-side recalculation as
+// a form's inputs change (see Step 4's per-line modal and totals box) — so
+// this file has to be safe to import from a "use client" component, not
+// just from server code. That's why this imports the standalone "decimal.js"
+// package rather than "@prisma/client/runtime/library": the latter bundles
+// Prisma's entire Node-only runtime (color libraries, `node:os`, `node:tty`,
+// etc.) and crashes Turbopack's client chunker the moment anything pulls it
+// into a client bundle. "decimal.js" is the same library Prisma's Decimal
+// is built on (pinned to the exact version @prisma/client itself uses), but
+// pure JS with no Node built-ins — safe in both places. Server call sites
+// that already hold a Prisma Decimal (e.g. `product.price`) must pass it in
+// as `.toString()`, not the raw instance — it's a different class from a
+// different package, so it won't structurally match this Decimal.
+//
+// All money in and out is Decimal, never float, per the project's core
+// rule.
 
 export type DiscountType = "FIXED" | "PERCENTAGE";
 export type TaxType = "EXCLUSIVE" | "INCLUSIVE";

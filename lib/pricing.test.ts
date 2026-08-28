@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Decimal } from "@prisma/client/runtime/library";
+import Decimal from "decimal.js";
 import { calculateLineTotals, calculateOrderTotals } from "./pricing";
 
 function d(value: Decimal) {
