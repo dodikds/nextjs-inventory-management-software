@@ -48,7 +48,8 @@ model Warehouse {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  stocks ProductStock[]
+  stocks      ProductStock[]
+  adjustments Adjustment[]
 
   @@map("warehouses")
 }
@@ -146,8 +147,9 @@ model Product {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  images ProductImage[]
-  stocks ProductStock[]
+  images          ProductImage[]
+  stocks          ProductStock[]
+  adjustmentItems AdjustmentItem[]
 
   @@index([name])
   @@index([code])
@@ -196,6 +198,50 @@ model ProductStock {
   @@index([productId])
   @@index([warehouseId])
   @@map("product_stocks")
+}
+
+enum AdjustmentItemType {
+  ADDITION
+  SUBTRACTION
+}
+
+// A multi-item document — the header a manual stock change is filed under.
+// Nothing else has an `adjustmentId` foreign key, so unlike Brand/Category/
+// Product there's no "is this in use" delete guard to write for it: soft-
+// deleting an Adjustment only hides it from the list. It deliberately does
+// NOT reverse the ProductStock changes it made (see
+// app/(dashboard)/adjustments/actions.ts) — an adjustment is a record of a
+// stock change that happened, not a draft that can be undone by deleting
+// the paper trail.
+model Adjustment {
+  id          String    @id @default(cuid())
+  reference   String    @unique
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id])
+  date        DateTime
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  items AdjustmentItem[]
+
+  @@index([warehouseId])
+  @@index([createdAt])
+  @@map("adjustments")
+}
+
+model AdjustmentItem {
+  id           String             @id @default(cuid())
+  adjustmentId String
+  adjustment   Adjustment         @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product            @relation(fields: [productId], references: [id])
+  quantity     Int
+  type         AdjustmentItemType
+
+  @@index([adjustmentId])
+  @@index([productId])
+  @@map("adjustment_items")
 }
 
 model Customer {
