@@ -13,10 +13,9 @@ type PurchaseRowActionsProps = {
 
 // Converted from design/Purchases.html's vanilla-JS row-action dropdown
 // (the `.action-cell` / `.act-toggle` / click-outside-closes script) into a
-// React client component. Download PDF and Delete are wired as visible
-// placeholders for now — Step 6 (View/PDF) and Step 8 (soft-delete with
-// stock reversal) replace them with real behavior; View and Edit already
-// link to their eventual routes.
+// React client component. Delete is still a visible placeholder — Step 8
+// (soft-delete with stock reversal) replaces it with real behavior; View,
+// Download PDF, and Edit all link to their real routes now.
 export default function PurchaseRowActions({ id, reference }: PurchaseRowActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const cellRef = useRef<HTMLDivElement>(null);
@@ -46,11 +45,6 @@ export default function PurchaseRowActions({ id, reference }: PurchaseRowActions
     setIsOpen(false);
   }
 
-  function handleDownloadPdf() {
-    closeMenu();
-    toast(`Downloading a PDF for ${reference} isn't available yet`);
-  }
-
   function handleDelete() {
     closeMenu();
     toast(`Deleting ${reference} isn't available yet`);
@@ -63,9 +57,9 @@ export default function PurchaseRowActions({ id, reference }: PurchaseRowActions
           <Link href={`/purchases/${id}`} className="gg-menu-item" onClick={closeMenu}>
             <Eye /> View Purchase
           </Link>
-          <button type="button" className="gg-menu-item" onClick={handleDownloadPdf}>
+          <Link href={`/purchases/${id}?download=1`} className="gg-menu-item" onClick={closeMenu}>
             <FileDown /> Download PDF
-          </button>
+          </Link>
           <Link href={`/purchases/${id}/edit`} className="gg-menu-item" onClick={closeMenu}>
             <Pencil /> Edit Purchase
           </Link>

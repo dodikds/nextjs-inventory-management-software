@@ -39,6 +39,8 @@ export type LineTotals = {
   discountAmount: Decimal;
   /** Total tax portion of this line (unit tax x quantity) — informational; already folded into `subtotal`. */
   taxAmount: Decimal;
+  /** The effective per-unit price after discount and tax — design/Purchase Details.html's "Unit Cost" column, distinct from the raw entered "Net Unit Cost". */
+  unitCostAfterAdjustments: Decimal;
   /** What this line contributes to the order — unit cost, minus discount, plus/inclusive of tax, x quantity. */
   subtotal: Decimal;
 };
@@ -80,6 +82,7 @@ export function calculateLineTotals({
   return {
     discountAmount: round2(discountPerUnit.times(qty)),
     taxAmount: round2(taxPerUnit.times(qty)),
+    unitCostAfterAdjustments: round2(unitPriceIncTax),
     subtotal: round2(unitPriceIncTax.times(qty)),
   };
 }

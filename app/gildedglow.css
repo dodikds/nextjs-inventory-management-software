@@ -520,3 +520,13 @@ button { font-family: inherit; }
 .gg-row { display: flex; align-items: center; }
 .gg-gap-2 { gap: var(--sp-2); } .gg-gap-3 { gap: var(--sp-3); } .gg-gap-4 { gap: var(--sp-4); } .gg-gap-6 { gap: var(--sp-6); }
 .gg-divider { height: 1px; background: var(--gray-150); border: none; margin: var(--sp-6) 0; }
+
+/* ================================================================= PRINT
+   Hides the app chrome so "Download PDF" (window.print(), see
+   PurchaseDownloadButton) produces just the page's own content — first
+   used by Purchase Details; any future print/PDF feature (e.g. Sales) can
+   reuse it as-is via the same .no-print class. */
+@media print {
+  .gg-sidebar, .gg-topbar, .dash-foot, .no-print { display: none !important; }
+  .gg-content { padding: 0 !important; }
+}

@@ -53,7 +53,7 @@ test("calculateLineTotals: percentage discount per unit", () => {
 });
 
 test("calculateLineTotals: exclusive tax is added on top of the discounted price", () => {
-  const { subtotal, taxAmount } = calculateLineTotals({
+  const { subtotal, taxAmount, unitCostAfterAdjustments } = calculateLineTotals({
     unitCost: 100,
     quantity: 1,
     discountType: "FIXED",
@@ -65,6 +65,25 @@ test("calculateLineTotals: exclusive tax is added on top of the discounted price
   // 100 + 10% tax
   assert.equal(d(subtotal), "110.00");
   assert.equal(d(taxAmount), "10.00");
+  assert.equal(d(unitCostAfterAdjustments), "110.00");
+});
+
+test("calculateLineTotals: unitCostAfterAdjustments reflects a multi-unit line's per-unit price", () => {
+  // design/Purchase Details.html's "Unit Cost" column — distinct from
+  // "Net Unit Cost" once a discount or tax actually changes the per-unit
+  // price. subtotal / quantity should recover the same figure.
+  const { unitCostAfterAdjustments, subtotal } = calculateLineTotals({
+    unitCost: 100,
+    quantity: 4,
+    discountType: "PERCENTAGE",
+    discount: 10,
+    taxType: "EXCLUSIVE",
+    taxRate: 10,
+  });
+
+  // (100 - 10%) = 90, + 10% tax = 99
+  assert.equal(d(unitCostAfterAdjustments), "99.00");
+  assert.equal(d(subtotal), "396.00");
 });
 
 test("calculateLineTotals: inclusive tax is already baked into unit cost", () => {
