@@ -449,3 +449,77 @@ export async function updatePurchase(id: string, input: unknown): Promise<Update
 
   return { success: true, id: parsedId.data };
 }
+
+export type DeletePurchaseResult = { success: true } | { success: false; message: string };
+
+// Called directly as `deletePurchase(id)` from the row's delete button
+// (wrapped in useTransition), not via a hidden form field — same pattern as
+// deleteAdjustment in ../adjustments/actions.ts. A soft-delete, but if the
+// purchase had added stock (status was RECEIVED), that stock is reversed
+// first — otherwise a deleted purchase would leave phantom stock behind
+// that no visible record explains. adjustProductStock's own negative-stock
+// guard (see lib/stock.ts) does the real work here: if any of that stock
+// has already been consumed elsewhere (e.g. sold) since this purchase was
+// received, reversing it would drive ProductStock negative, so the whole
+// delete is refused with an explanatory message instead of writing a
+// negative quantity.
+export async function deletePurchase(id: string): Promise<DeletePurchaseResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_purchases")) {
+    return { success: false, message: "You don't have permission to manage purchases" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid purchase" };
+  }
+
+  let productIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      const existing = await tx.purchase.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new PurchaseNotFoundError();
+      }
+      productIds = existing.items.map((item) => item.productId);
+
+      if (existing.status === "RECEIVED") {
+        for (const item of existing.items) {
+          await adjustProductStock(tx, {
+            productId: item.productId,
+            warehouseId: existing.warehouseId,
+            delta: -item.quantity,
+          });
+        }
+      }
+
+      await tx.purchase.update({ where: { id: parsedId.data }, data: { deletedAt: new Date() } });
+    });
+  } catch (error) {
+    if (error instanceof PurchaseNotFoundError) {
+      return { success: false, message: "Purchase not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `Can't delete — ${product?.name ?? "a product"} doesn't have enough stock left in ${warehouseRow?.name ?? "its warehouse"} to reverse this purchase (some of it may already be sold or used elsewhere)`,
+      };
+    }
+    throw error;
+  }
+
+  revalidatePath("/purchases");
+  revalidatePath("/products");
+  for (const productId of productIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true };
+}
