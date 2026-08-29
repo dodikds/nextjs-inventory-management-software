@@ -528,5 +528,6 @@ button { font-family: inherit; }
    reuse it as-is via the same .no-print class. */
 @media print {
   .gg-sidebar, .gg-topbar, .dash-foot, .no-print { display: none !important; }
+  .gg-app { display: block !important; }
   .gg-content { padding: 0 !important; }
 }
