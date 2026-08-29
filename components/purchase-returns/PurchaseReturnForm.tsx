@@ -6,6 +6,7 @@ import { Calendar, Check, Minus, Pencil, Plus, Search, Trash2 } from "lucide-rea
 import toast from "react-hot-toast";
 import {
   searchProductsForPurchaseReturn,
+  createPurchaseReturn,
   type PurchaseReturnProductSearchResult,
 } from "@/app/(dashboard)/purchases/returns/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
@@ -207,13 +208,47 @@ export default function PurchaseReturnForm({ warehouses, suppliers, units, initi
     shipping: shipping || 0,
   });
 
-  // Save isn't wired up yet — the atomic create/update server action (with
-  // the server-side recompute and the no-negative-stock rule) is a separate
-  // step. This keeps the step reviewable on its own before that logic lands.
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     startSaveTransition(async () => {
-      toast("Saving isn't wired up yet — coming in the next step.");
+      // Editing isn't wired up yet — updatePurchaseReturn is a later step
+      // (reconciling stock by difference, not a blind re-decrement).
+      if (isEditing) {
+        toast("Editing isn't wired up yet — coming in a later step.");
+        return;
+      }
+
+      const payload = {
+        date,
+        warehouseId,
+        supplierId,
+        items: items.map((item) => ({
+          productId: item.productId,
+          unitCost: item.unitCost,
+          quantity: item.quantity,
+          discountType: item.discountType,
+          discount: item.discount,
+          taxType: item.taxType,
+          orderTax: item.orderTax,
+          unit: item.unit,
+        })),
+        orderTax: orderTaxPercent,
+        discount,
+        shipping,
+        status,
+        notes: notes || undefined,
+      };
+
+      const result = await createPurchaseReturn(payload);
+
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Purchase return created");
+      router.push("/purchases/returns");
     });
   }
 
