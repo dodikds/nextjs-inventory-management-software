@@ -86,3 +86,15 @@ export async function getSales({ q, date, page, perPage }: GetSalesParams) {
 
   return { sales, total, grandTotalSum, paidSum, page: safePage };
 }
+
+export async function getWarehouseOptions() {
+  return dbPrisma.warehouse.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}
+
+export async function getCustomerOptions() {
+  return dbPrisma.customer.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}
+
+export async function getUnitOptions() {
+  return dbPrisma.unit.findMany({ orderBy: { name: "asc" } });
+}

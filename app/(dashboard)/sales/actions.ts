@@ -9,6 +9,67 @@ import { adjustProductStock } from "@/lib/stock";
 
 const idSchema = z.string().trim().min(1, "Invalid sale id");
 
+const searchSchema = z.object({
+  query: z.string().trim().min(1).max(190),
+  warehouseId: z.string().trim().min(1),
+});
+
+export type SaleProductSearchResult = {
+  id: string;
+  name: string;
+  code: string;
+  /** The product's own price, as a string — the default for that line's Net Unit Price, still editable. */
+  unitPrice: string;
+  /** Current quantity in the selected warehouse — the ceiling on what this line can sell. */
+  stock: number;
+  productUnit: string;
+  taxType: "EXCLUSIVE" | "INCLUSIVE";
+  /** The product's own default order tax rate, as a string (used by the per-line edit modal). */
+  orderTax: string;
+};
+
+// Same warehouse-required, stock-scoped shape as
+// ../purchases/returns/actions.ts's searchProductsForPurchaseReturn — you
+// can't sell stock this warehouse doesn't have, unlike Purchases' own
+// unfiltered search (a purchase adds new stock, so any product qualifies).
+export async function searchProductsForSale(query: string, warehouseId: string): Promise<SaleProductSearchResult[]> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_sales")) {
+    return [];
+  }
+
+  const parsed = searchSchema.safeParse({ query, warehouseId });
+  if (!parsed.success) {
+    return [];
+  }
+
+  const products = await dbPrisma.product.findMany({
+    where: {
+      deletedAt: null,
+      OR: [{ name: { contains: parsed.data.query } }, { code: { contains: parsed.data.query } }],
+      stocks: { some: { warehouseId: parsed.data.warehouseId, quantity: { gt: 0 } } },
+    },
+    include: {
+      // Scoped to just this warehouse — the `some` filter above guarantees
+      // this is present and positive.
+      stocks: { where: { warehouseId: parsed.data.warehouseId }, select: { quantity: true } },
+    },
+    orderBy: { name: "asc" },
+    take: 15,
+  });
+
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    code: product.code,
+    unitPrice: product.price.toString(),
+    stock: product.stocks[0]?.quantity ?? 0,
+    productUnit: product.productUnit,
+    taxType: product.taxType,
+    orderTax: (product.orderTax ?? 0).toString(),
+  }));
+}
+
 class SaleNotFoundError extends Error {}
 
 export type DeleteSaleResult = { success: true } | { success: false; message: string };
