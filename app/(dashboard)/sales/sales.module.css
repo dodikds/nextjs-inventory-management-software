@@ -1,0 +1,22 @@
+/* Ported from design/Sales.html's own <style> block — only the rules that
+   actually belong to this page. .action-cell/.gg-menu positioning lives in
+   SaleRowActions.module.css since that's the component that owns it. */
+.date-field { position: relative; }
+.date-field svg {
+  position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  width: 18px; height: 18px; color: var(--gray-500); pointer-events: none;
+}
+.date-field .input { padding-right: 46px; color: var(--gray-500); }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-8) 0; text-align: center; }
+.empty-state svg { width: 40px; height: 40px; color: var(--gray-300); }
+.empty-state .title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }
+
+.skeleton-bar {
+  height: 14px; border-radius: var(--r-sm); background: var(--gray-150);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
