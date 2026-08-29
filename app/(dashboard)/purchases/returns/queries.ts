@@ -91,3 +91,14 @@ export async function getSupplierOptions() {
 export async function getUnitOptions() {
   return dbPrisma.unit.findMany({ orderBy: { name: "asc" } });
 }
+
+export async function getPurchaseReturnById(id: string) {
+  return dbPrisma.purchaseReturn.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      supplier: true,
+      warehouse: true,
+      items: { include: { product: { select: { name: true, code: true } } } },
+    },
+  });
+}
