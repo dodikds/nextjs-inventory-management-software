@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
-import { adjustProductStock, InsufficientStockError } from "@/lib/stock";
+import { adjustProductStock, computeStockDeltas, InsufficientStockError } from "@/lib/stock";
 import { purchaseReturnSchema } from "@/lib/validation/purchaseReturn";
 
 const idSchema = z.string().trim().min(1, "Invalid purchase return id");
@@ -245,6 +245,193 @@ export async function createPurchaseReturn(input: unknown): Promise<CreatePurcha
   }
 
   return { success: true, id: purchaseReturnId };
+}
+
+export type UpdatePurchaseReturnResult = { success: true; id: string } | { success: false; message: string };
+
+// Reuses PurchaseReturnForm in edit mode (pre-filled — see
+// app/(dashboard)/purchases/returns/[id]/edit/page.tsx) and the same
+// validate-then-recompute path as createPurchaseReturn above. Same care as
+// updatePurchase in ../actions.ts: it never re-runs createPurchaseReturn's
+// "decrement stock for every Received line" logic, since the return being
+// edited may already have decremented stock for its *old* quantities;
+// doing that again would double it. See the computeStockDeltas call below.
+export async function updatePurchaseReturn(id: string, input: unknown): Promise<UpdatePurchaseReturnResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_purchase_returns")) {
+    return { success: false, message: "You don't have permission to manage purchase returns" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid purchase return" };
+  }
+
+  const parsed = purchaseReturnSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const { date, warehouseId, supplierId, items, orderTax, discount, shipping, status, notes } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  // Same re-validation as createPurchaseReturn — the submitted ids still
+  // arrive as plain values from a client call.
+  const [warehouse, supplier, products] = await Promise.all([
+    dbPrisma.warehouse.findFirst({ where: { id: warehouseId, deletedAt: null } }),
+    dbPrisma.supplier.findUnique({ where: { id: supplierId } }),
+    dbPrisma.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) }, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!warehouse) {
+    return { success: false, message: "Please choose a valid warehouse" };
+  }
+  if (!supplier) {
+    return { success: false, message: "Please choose a valid supplier" };
+  }
+  if (products.length !== items.length) {
+    return { success: false, message: "One or more products are no longer available" };
+  }
+
+  const itemTotals = items.map((item) =>
+    calculateLineTotals({
+      unitCost: item.unitCost,
+      quantity: item.quantity,
+      discountType: item.discountType,
+      discount: item.discount,
+      taxType: item.taxType,
+      taxRate: item.orderTax,
+    }),
+  );
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: itemTotals.map((total) => total.subtotal),
+    orderTaxRate: orderTax,
+    discount,
+    shipping,
+  });
+
+  let oldProductIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      // Read the return's state as it was before this save — both for the
+      // 404 check and as the "old" side of the stock reconciliation below —
+      // inside the same transaction as the writes that follow, so nothing
+      // else can change it in between.
+      const existing = await tx.purchaseReturn.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new PurchaseReturnNotFoundError();
+      }
+      oldProductIds = existing.items.map((item) => item.productId);
+
+      // Simplest correct way to let items be arbitrarily added, removed, or
+      // edited between saves: replace the whole set rather than diffing and
+      // patching individual PurchaseReturnItem rows. The reference itself
+      // is never regenerated on edit.
+      await tx.purchaseReturnItem.deleteMany({ where: { returnId: parsedId.data } });
+
+      await tx.purchaseReturn.update({
+        where: { id: parsedId.data },
+        data: {
+          warehouseId,
+          supplierId,
+          date: parsedDate,
+          status,
+          orderTax,
+          discount,
+          shipping,
+          grandTotal: orderTotals.grandTotal.toFixed(2),
+          notes: notes || null,
+          items: {
+            create: items.map((item, index) => ({
+              productId: item.productId,
+              netUnitCost: item.unitCost,
+              quantity: item.quantity,
+              discountType: item.discountType,
+              discount: item.discount,
+              taxType: item.taxType,
+              orderTax: item.orderTax,
+              unit: item.unit,
+              subtotal: itemTotals[index].subtotal.toFixed(2),
+            })),
+          },
+        },
+      });
+
+      // Stock reconciliation — the mirror image of updatePurchase's own
+      // (see ../actions.ts): a Purchase's contributing quantities ADD
+      // stock, so computeStockDeltas' "new minus old" convention nets
+      // correctly there as-is. A Purchase Return's contributing quantities
+      // SUBTRACT stock instead — the opposite sign — so every quantity
+      // passed in here is negated first. computeStockDeltas then computes
+      // (-newQty) - (-oldQty) = oldQty - newQty per (warehouse, product),
+      // which is exactly the delta this decrementing module needs: reverse
+      // the old return's decrement (+oldQty) and apply the new one
+      // (-newQty). Everything else about the reconciliation — a status
+      // flip nets to the full old/new amount, an added/removed item nets to
+      // a pure +/-, a warehouse change reverses the old warehouse and
+      // applies the new one separately rather than netting them together —
+      // falls out of computeStockDeltas' existing math unchanged, and
+      // adjustProductStock's own negative-stock guard still applies to the
+      // net result, so a return still can't be edited to take a warehouse
+      // below zero. This is the only place this action touches stock;
+      // createPurchaseReturn's "decrement for every Received line" is never
+      // called again here.
+      const oldQuantities =
+        existing.status === "RECEIVED"
+          ? existing.items.map((item) => ({ productId: item.productId, quantity: -item.quantity }))
+          : [];
+      const newQuantities =
+        status === "RECEIVED" ? items.map((item) => ({ productId: item.productId, quantity: -item.quantity })) : [];
+
+      const deltas = computeStockDeltas({
+        oldWarehouseId: existing.warehouseId,
+        oldQuantities,
+        newWarehouseId: warehouseId,
+        newQuantities,
+      });
+      for (const delta of deltas) {
+        await adjustProductStock(tx, delta);
+      }
+    });
+  } catch (error) {
+    if (error instanceof PurchaseReturnNotFoundError) {
+      return { success: false, message: "Purchase return not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `${product?.name ?? "That product"} doesn't have enough stock in ${warehouseRow?.name ?? "that warehouse"} for this change — some of it may already be committed elsewhere`,
+      };
+    }
+    throw error;
+  }
+
+  // Revalidate every product that either contributed stock before this edit
+  // or does now — the union covers items that were added, removed, or just
+  // changed quantity.
+  revalidatePath("/purchases/returns");
+  revalidatePath(`/purchases/returns/${parsedId.data}`);
+  revalidatePath("/products");
+  const affectedProductIds = new Set([...oldProductIds, ...items.map((item) => item.productId)]);
+  for (const productId of affectedProductIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true, id: parsedId.data };
 }
 
 export type DeletePurchaseReturnResult = { success: true } | { success: false; message: string };

@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import {
   searchProductsForPurchaseReturn,
   createPurchaseReturn,
+  updatePurchaseReturn,
   type PurchaseReturnProductSearchResult,
 } from "@/app/(dashboard)/purchases/returns/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
@@ -212,13 +213,6 @@ export default function PurchaseReturnForm({ warehouses, suppliers, units, initi
     e.preventDefault();
 
     startSaveTransition(async () => {
-      // Editing isn't wired up yet — updatePurchaseReturn is a later step
-      // (reconciling stock by difference, not a blind re-decrement).
-      if (isEditing) {
-        toast("Editing isn't wired up yet — coming in a later step.");
-        return;
-      }
-
       const payload = {
         date,
         warehouseId,
@@ -240,15 +234,15 @@ export default function PurchaseReturnForm({ warehouses, suppliers, units, initi
         notes: notes || undefined,
       };
 
-      const result = await createPurchaseReturn(payload);
+      const result = isEditing ? await updatePurchaseReturn(initialData.id, payload) : await createPurchaseReturn(payload);
 
       if (!result.success) {
         toast.error(result.message);
         return;
       }
 
-      toast.success("Purchase return created");
-      router.push("/purchases/returns");
+      toast.success(isEditing ? "Purchase return updated" : "Purchase return created");
+      router.push(isEditing ? `/purchases/returns/${result.id}` : "/purchases/returns");
     });
   }
 
