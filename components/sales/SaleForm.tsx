@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Calendar, Check, Minus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import Decimal from "decimal.js";
 import toast from "react-hot-toast";
-import { searchProductsForSale, type SaleProductSearchResult } from "@/app/(dashboard)/sales/actions";
+import { searchProductsForSale, createSale, type SaleProductSearchResult } from "@/app/(dashboard)/sales/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import SaleItemModal, { type SaleItemModalValues } from "./SaleItemModal";
@@ -240,8 +240,48 @@ export default function SaleForm({ warehouses, customers, units, initialData }: 
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     startSaveTransition(async () => {
-      toast("Saving isn't wired up yet — coming in the next step.");
+      // Editing isn't wired up yet — updateSale is a later step
+      // (reconciling stock by difference, not a blind re-decrement, and
+      // never touching existing SalePayment rows).
+      if (isEditing) {
+        toast("Editing isn't wired up yet — coming in a later step.");
+        return;
+      }
+
+      const payload = {
+        date,
+        warehouseId,
+        customerId,
+        items: items.map((item) => ({
+          productId: item.productId,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          discountType: item.discountType,
+          discount: item.discount,
+          taxType: item.taxType,
+          orderTax: item.orderTax,
+          unit: item.unit,
+        })),
+        orderTax: orderTaxPercent,
+        discount,
+        shipping,
+        status,
+        paid: initialPaid,
+        paymentType: initialPaymentType || undefined,
+        notes: notes || undefined,
+      };
+
+      const result = await createSale(payload);
+
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Sale created");
+      router.push("/sales");
     });
   }
 
