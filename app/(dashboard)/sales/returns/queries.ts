@@ -82,6 +82,18 @@ export async function getUnitOptions() {
   return dbPrisma.unit.findMany({ orderBy: { name: "asc" } });
 }
 
+export async function getSaleReturnById(id: string) {
+  return dbPrisma.saleReturn.findFirst({
+    where: { id, deletedAt: null },
+    include: {
+      customer: true,
+      warehouse: true,
+      sale: { select: { reference: true } },
+      items: { include: { product: { select: { name: true, code: true } } } },
+    },
+  });
+}
+
 // Shared by the create page (pre-filling each line's "Stock" reference from
 // the sale's own warehouse) and the edit page — same pairing as every
 // other module's own getProductStockMap.
