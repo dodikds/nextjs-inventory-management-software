@@ -4,7 +4,11 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Calendar, Check, Minus, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
-import { searchProductsForTransfer, type TransferProductSearchResult } from "@/app/(dashboard)/transfers/actions";
+import {
+  searchProductsForTransfer,
+  createTransfer,
+  type TransferProductSearchResult,
+} from "@/app/(dashboard)/transfers/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import TransferItemModal, { type TransferItemModalValues } from "./TransferItemModal";
@@ -208,11 +212,45 @@ export default function TransferForm({ warehouses, units, initialData }: Transfe
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    // Save isn't wired up yet — createTransfer/updateTransfer land in the
-    // next step (the atomic server action with the paired stock move).
-    // This step is the form and its live totals only.
     startSaveTransition(async () => {
-      toast("Saving isn't wired up yet — coming in the next step.");
+      // Editing isn't wired up yet — updateTransfer is a later step
+      // (reconciling both warehouses by difference, not re-running
+      // create's stock move, which would double it).
+      if (isEditing) {
+        toast("Editing isn't wired up yet — coming in a later step.");
+        return;
+      }
+
+      const payload = {
+        date,
+        fromWarehouseId,
+        toWarehouseId,
+        items: items.map((item) => ({
+          productId: item.productId,
+          unitCost: item.unitCost,
+          quantity: item.quantity,
+          discountType: item.discountType,
+          discount: item.discount,
+          taxType: item.taxType,
+          orderTax: item.orderTax,
+          unit: item.unit,
+        })),
+        orderTax: orderTaxPercent,
+        discount,
+        shipping,
+        status,
+        notes: notes || undefined,
+      };
+
+      const result = await createTransfer(payload);
+
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Transfer created");
+      router.push("/transfers");
     });
   }
 
