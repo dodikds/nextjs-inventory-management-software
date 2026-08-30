@@ -54,6 +54,8 @@ model Warehouse {
   purchaseReturns PurchaseReturn[]
   sales           Sale[]
   saleReturns     SaleReturn[]
+  transfersFrom   Transfer[]       @relation("TransferFrom")
+  transfersTo     Transfer[]       @relation("TransferTo")
 
   @@map("warehouses")
 }
@@ -160,6 +162,7 @@ model Product {
   purchaseReturnItems PurchaseReturnItem[]
   saleItems           SaleItem[]
   saleReturnItems     SaleReturnItem[]
+  transferItems       TransferItem[]
 
   @@index([name])
   @@index([code])
@@ -616,4 +619,70 @@ model SaleReturnItem {
   @@index([returnId])
   @@index([productId])
   @@map("sale_return_items")
+}
+
+enum TransferStatus {
+  PENDING
+  SENT
+  COMPLETED
+}
+
+// The only module that touches two warehouses in a single document — see
+// AGENTS.md. Every stock movement here calls lib/stock.ts's
+// adjustProductStock TWICE per line, inside one prisma.$transaction: an
+// equal decrement on fromWarehouseId and increment on toWarehouseId, so the
+// pair can never apply partially and total system stock never changes (see
+// the create/edit/delete actions for exactly when that pair runs relative
+// to `status`). No supplier/customer/payment fields — a transfer moves
+// stock between this app's own warehouses, it isn't a transaction with an
+// outside party.
+model Transfer {
+  id              String         @id @default(cuid())
+  reference       String         @unique
+  fromWarehouseId String
+  fromWarehouse   Warehouse      @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouseId   String
+  toWarehouse     Warehouse      @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  date            DateTime
+  status          TransferStatus @default(PENDING)
+  orderTax        Decimal        @default(0) @db.Decimal(5, 2)
+  discount        Decimal        @default(0) @db.Decimal(12, 2)
+  shipping        Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal      Decimal        @db.Decimal(12, 2)
+  notes           String?        @db.Text
+  deletedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  items TransferItem[]
+
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([createdAt])
+  @@index([date])
+  @@map("transfers")
+}
+
+model TransferItem {
+  id           String       @id @default(cuid())
+  transferId   String
+  transfer     Transfer     @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product      @relation(fields: [productId], references: [id])
+  netUnitCost  Decimal      @db.Decimal(12, 2)
+  quantity     Int
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  // Not in the original field list but needed to persist the per-line edit
+  // modal's "Product Unit" select (design/Create Transfer.html reuses the
+  // same modal shape as Purchase/Sale) — same reasoning as PurchaseItem.unit.
+  // Defaults to the product's own unit.
+  unit         String
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  @@index([transferId])
+  @@index([productId])
+  @@map("transfer_items")
 }
