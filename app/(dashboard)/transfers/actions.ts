@@ -484,11 +484,18 @@ export type DeleteTransferResult = { success: true } | { success: false; message
 
 // Called directly as `deleteTransfer(id)` from the row's delete button
 // (wrapped in useTransition) — same pattern as every other module's delete.
-// Still a plain soft-delete for now — it does NOT yet reverse a COMPLETED
-// transfer's stock move (createTransfer above can move real stock as of
-// this step). That reversal is Step 6's own job: add stock back to
-// fromWarehouse, remove it from toWarehouse, guarding against negative
-// stock in toWarehouse, all inside one prisma.$transaction.
+// A soft-delete, but — unlike a plain-record delete — it must also undo
+// whatever stock the transfer actually moved: deleting a document that
+// already moved real stock can't just erase the paper trail and leave the
+// warehouses out of sync with it.
+//
+// Stock moves the OPPOSITE direction from createTransfer/updateTransfer:
+// this transfer's own move took quantity OUT of fromWarehouse and put it
+// INTO toWarehouse, so undoing it puts that same quantity back INTO
+// fromWarehouse and takes it back OUT of toWarehouse — a mirror image, not
+// a repeat, of the original. Same in-transit rule as create/update applies
+// first, though: a transfer only ever moved stock while COMPLETED, so
+// deleting a Pending/Sent one has nothing to reverse at all.
 export async function deleteTransfer(id: string): Promise<DeleteTransferResult> {
   const session = await auth();
   if (!hasPermission(session, "manage_transfers")) {
@@ -500,14 +507,64 @@ export async function deleteTransfer(id: string): Promise<DeleteTransferResult> 
     return { success: false, message: "Invalid transfer" };
   }
 
-  const existing = await dbPrisma.transfer.findFirst({ where: { id: parsedId.data, deletedAt: null } });
-  if (!existing) {
-    return { success: false, message: "Transfer not found" };
+  let productIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      const existing = await tx.transfer.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new TransferNotFoundError();
+      }
+      productIds = existing.items.map((item) => item.productId);
+
+      if (existing.status === "COMPLETED") {
+        for (const item of existing.items) {
+          // Reverse fromWarehouse FIRST on every line — giving stock back
+          // can never trip adjustProductStock's negative-stock guard (a
+          // quantity that once left a warehouse can always return to it).
+          // toWarehouse's decrement is the one that CAN fail — guarded
+          // below — since some of what arrived there may already have been
+          // sold, transferred out again, or adjusted away since this
+          // transfer completed.
+          await adjustProductStock(tx, {
+            productId: item.productId,
+            warehouseId: existing.fromWarehouseId,
+            delta: item.quantity,
+          });
+          await adjustProductStock(tx, {
+            productId: item.productId,
+            warehouseId: existing.toWarehouseId,
+            delta: -item.quantity,
+          });
+        }
+      }
+
+      await tx.transfer.update({ where: { id: parsedId.data }, data: { deletedAt: new Date() } });
+    });
+  } catch (error) {
+    if (error instanceof TransferNotFoundError) {
+      return { success: false, message: "Transfer not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `Can't delete — ${product?.name ?? "a product"} doesn't have enough stock left in ${warehouseRow?.name ?? "its warehouse"} to reverse this transfer (some of it may already be sold or moved elsewhere)`,
+      };
+    }
+    throw error;
   }
 
-  await dbPrisma.transfer.update({ where: { id: parsedId.data }, data: { deletedAt: new Date() } });
-
   revalidatePath("/transfers");
+  revalidatePath("/products");
+  for (const productId of productIds) {
+    revalidatePath(`/products/${productId}`);
+  }
 
   return { success: true };
 }

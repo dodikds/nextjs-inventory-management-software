@@ -79,8 +79,8 @@ export default function TransferRowActions({ id, reference }: TransferRowActions
           </div>
           <div className="gg-modal-body">
             <p className="gg-muted">
-              Are you sure you want to delete <strong style={{ color: "var(--ink)" }}>{reference}</strong>? This
-              cannot be undone.
+              Are you sure you want to delete <strong style={{ color: "var(--ink)" }}>{reference}</strong>? If it had
+              moved stock, that move will be reversed. This cannot be undone.
             </p>
           </div>
           <div className="gg-modal-foot">
