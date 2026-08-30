@@ -1,0 +1,49 @@
+/* Ported from Transfers.html's own <style> block — only the rules that
+   actually belong to this page. .date-field and .action-cell/.gg-menu were
+   leftovers from other screens (this page has no date filter and uses
+   inline .row-acts buttons, not a dropdown) and are dropped, same as
+   Suppliers/Users/Customers did; .row-acts is already promoted to
+   gildedglow.css; .dash-foot is rendered once by the shared dashboard
+   Footer, not per-page. .gg-check IS actually used here — unlike those
+   other modules, this is the first list that wires up real checkboxes. */
+.gg-check {
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--gray-300);
+  border-radius: var(--r-xs);
+  background: #fff;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.gg-check:checked {
+  background: var(--gold-600);
+  border-color: var(--gold-600);
+}
+.gg-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-8) 0; text-align: center; }
+.empty-state svg { width: 40px; height: 40px; color: var(--gray-300); }
+.empty-state .title { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }
+
+.skeleton-bar {
+  height: 14px; border-radius: var(--r-sm); background: var(--gray-150);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .45; }
+}
