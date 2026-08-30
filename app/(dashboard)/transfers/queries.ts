@@ -70,6 +70,14 @@ export async function getTransfers({ q, page, perPage }: GetTransfersParams) {
   return { transfers, total, page: safePage };
 }
 
+export async function getWarehouseOptions() {
+  return dbPrisma.warehouse.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}
+
+export async function getUnitOptions() {
+  return dbPrisma.unit.findMany({ orderBy: { name: "asc" } });
+}
+
 export async function getTransferById(id: string) {
   return dbPrisma.transfer.findFirst({
     where: { id, deletedAt: null },
