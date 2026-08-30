@@ -10,7 +10,8 @@ export type Permission =
   | "manage_adjustments"
   | "manage_purchases"
   | "manage_purchase_returns"
-  | "manage_sales";
+  | "manage_sales"
+  | "manage_sale_returns";
 
 // TODO: replace this map with a real DB-backed role -> permissions lookup
 // once the Roles/Permissions module (see the sidebar) exists. Every server
@@ -28,6 +29,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "manage_purchases",
     "manage_purchase_returns",
     "manage_sales",
+    "manage_sale_returns",
   ],
 };
 
