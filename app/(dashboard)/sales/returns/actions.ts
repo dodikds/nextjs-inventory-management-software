@@ -2,12 +2,13 @@
 
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import Decimal from "decimal.js";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
-import { adjustProductStock, InsufficientStockError } from "@/lib/stock";
+import { adjustProductStock, computeStockDeltas, InsufficientStockError } from "@/lib/stock";
 import { saleReturnSchema } from "@/lib/validation/saleReturn";
 
 const idSchema = z.string().trim().min(1, "Invalid sale return id");
@@ -23,6 +24,18 @@ function isDuplicateReferenceError(error: unknown): boolean {
   if (typeof target === "string") return target.includes("reference");
   if (Array.isArray(target)) return (target as string[]).includes("reference");
   return false;
+}
+
+// The refund's paymentStatus is always DERIVED, never free-typed — same
+// rule as Sale's own paymentStatus (see that model's schema comment) —
+// though nothing in this module writes a non-zero `paid` yet (no refund-
+// recording feature exists), this keeps `due`/`paymentStatus` honest
+// against a changing grandTotal on edit regardless.
+type SalePaymentStatus = "UNPAID" | "PAID" | "PARTIAL";
+function derivePaymentStatus(paid: Decimal, grandTotal: Decimal): SalePaymentStatus {
+  if (paid.lte(0)) return "UNPAID";
+  if (paid.gte(grandTotal)) return "PAID";
+  return "PARTIAL";
 }
 
 class SaleReturnNotFoundError extends Error {}
@@ -182,6 +195,203 @@ export async function createSaleReturn(input: unknown): Promise<CreateSaleReturn
   }
 
   return { success: true, id: saleReturnId };
+}
+
+export type UpdateSaleReturnResult = { success: true; id: string } | { success: false; message: string };
+
+// Reuses SaleReturnForm in edit mode (pre-filled — see
+// app/(dashboard)/sales/returns/[id]/edit/page.tsx) and the same validate-
+// then-recompute path as createSaleReturn above, with the same
+// "not more than originally sold" re-check against the linked sale's own
+// stored quantities. The one thing it does differently — the careful part —
+// is how it touches stock: it never re-runs createSaleReturn's "increment
+// for every line" logic, since the return being edited may already have
+// incremented stock for its *old* quantities; doing that again would
+// double it. See the computeStockDeltas call below.
+export async function updateSaleReturn(id: string, input: unknown): Promise<UpdateSaleReturnResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_sale_returns")) {
+    return { success: false, message: "You don't have permission to manage sale returns" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid sale return" };
+  }
+
+  const parsed = saleReturnSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const { saleId, date, status, items, orderTax, discount, shipping, notes } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  // Same re-validation as createSaleReturn — the linked sale's own
+  // quantities are the ceiling every returned line must respect.
+  const [sale, products] = await Promise.all([
+    dbPrisma.sale.findFirst({ where: { id: saleId, deletedAt: null }, include: { items: true } }),
+    dbPrisma.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) }, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!sale) {
+    return { success: false, message: "The original sale could not be found" };
+  }
+  if (products.length !== items.length) {
+    return { success: false, message: "One or more products are no longer available" };
+  }
+
+  const soldQuantityByProduct = new Map(sale.items.map((item) => [item.productId, item.quantity]));
+  for (const item of items) {
+    const soldQuantity = soldQuantityByProduct.get(item.productId);
+    if (soldQuantity === undefined) {
+      return { success: false, message: "One or more products were not part of the original sale" };
+    }
+    if (item.quantity > soldQuantity) {
+      return {
+        success: false,
+        message: `Can't return more than the ${soldQuantity} originally sold for one of these products`,
+      };
+    }
+  }
+
+  const itemTotals = items.map((item) =>
+    calculateLineTotals({
+      unitCost: item.unitPrice,
+      quantity: item.quantity,
+      discountType: item.discountType,
+      discount: item.discount,
+      taxType: item.taxType,
+      taxRate: item.orderTax,
+    }),
+  );
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: itemTotals.map((total) => total.subtotal),
+    orderTaxRate: orderTax,
+    discount,
+    shipping,
+  });
+
+  let oldProductIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      // Read the return's state as it was before this save — both for the
+      // 404 check and as the "old" side of the stock reconciliation below —
+      // inside the same transaction as the writes that follow.
+      const existing = await tx.saleReturn.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new SaleReturnNotFoundError();
+      }
+      oldProductIds = existing.items.map((item) => item.productId);
+
+      // Simplest correct way to let items be arbitrarily reduced or
+      // removed between saves: replace the whole set rather than diffing
+      // and patching individual SaleReturnItem rows. The reference,
+      // customerId, warehouseId, and saleId are never changed on edit —
+      // same fields createSaleReturn derived from the sale once, fixed
+      // from then on.
+      await tx.saleReturnItem.deleteMany({ where: { returnId: parsedId.data } });
+
+      // due/paymentStatus recomputed against the NEW grandTotal — `paid`
+      // itself is left untouched (still whatever a future refund-recording
+      // feature may have set; today that's always create's $0 default,
+      // since no such feature exists yet).
+      const existingPaid = new Decimal(existing.paid.toString());
+      const due = Decimal.max(0, orderTotals.grandTotal.minus(existingPaid));
+      const paymentStatus = derivePaymentStatus(existingPaid, orderTotals.grandTotal);
+
+      await tx.saleReturn.update({
+        where: { id: parsedId.data },
+        data: {
+          date: parsedDate,
+          status,
+          orderTax,
+          discount,
+          shipping,
+          grandTotal: orderTotals.grandTotal.toFixed(2),
+          due: due.toFixed(2),
+          paymentStatus,
+          notes: notes || null,
+          items: {
+            create: items.map((item, index) => ({
+              productId: item.productId,
+              netUnitPrice: item.unitPrice,
+              quantity: item.quantity,
+              discountType: item.discountType,
+              discount: item.discount,
+              taxType: item.taxType,
+              orderTax: item.orderTax,
+              unit: item.unit,
+              subtotal: itemTotals[index].subtotal.toFixed(2),
+            })),
+          },
+        },
+      });
+
+      // Stock reconciliation. Unlike updateSale/updatePurchaseReturn, NO
+      // sign inversion is needed here: a SaleReturn INCREMENTS stock — the
+      // same direction Purchase uses — so computeStockDeltas' native "new
+      // minus old" convention already produces the right sign as-is (this
+      // is the same math updatePurchase itself uses). It's also NOT gated
+      // by `status` at all (see the SaleReturn model's own schema comment
+      // — stock moves unconditionally), so unlike every sibling edit
+      // action there's no "only if Received" branch: old and new
+      // quantities both always contribute. The warehouse itself never
+      // changes on a return edit (there's no field for it), so old/new
+      // warehouse are the same id. adjustProductStock's negative-stock
+      // guard still applies to the net result — reducing a return's
+      // quantity removes some of the stock it had added back, and that can
+      // fail if this warehouse doesn't have that much left (e.g. it was
+      // already sold again since this return was recorded).
+      const oldQuantities = existing.items.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+      const newQuantities = items.map((item) => ({ productId: item.productId, quantity: item.quantity }));
+
+      const deltas = computeStockDeltas({
+        oldWarehouseId: existing.warehouseId,
+        oldQuantities,
+        newWarehouseId: existing.warehouseId,
+        newQuantities,
+      });
+      for (const delta of deltas) {
+        await adjustProductStock(tx, delta);
+      }
+    });
+  } catch (error) {
+    if (error instanceof SaleReturnNotFoundError) {
+      return { success: false, message: "Sale return not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `${product?.name ?? "That product"} doesn't have enough stock in ${warehouseRow?.name ?? "that warehouse"} for this change — some of it may already have been sold or moved elsewhere`,
+      };
+    }
+    throw error;
+  }
+
+  revalidatePath("/sales/returns");
+  revalidatePath(`/sales/returns/${parsedId.data}`);
+  revalidatePath("/products");
+  const affectedProductIds = new Set([...oldProductIds, ...items.map((item) => item.productId)]);
+  for (const productId of affectedProductIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true, id: parsedId.data };
 }
 
 export type DeleteSaleReturnResult = { success: true } | { success: false; message: string };
