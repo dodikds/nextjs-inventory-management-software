@@ -77,3 +77,32 @@ export async function getSaleReturns({ q, date, page, perPage }: GetSaleReturnsP
 
   return { saleReturns, total, page: safePage };
 }
+
+export async function getUnitOptions() {
+  return dbPrisma.unit.findMany({ orderBy: { name: "asc" } });
+}
+
+// Shared by the create page (pre-filling each line's "Stock" reference from
+// the sale's own warehouse) and the edit page — same pairing as every
+// other module's own getProductStockMap.
+export async function getProductStockMap(
+  productIds: string[],
+  warehouseId: string,
+): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const productId of productIds) {
+    result[productId] = 0;
+  }
+  if (productIds.length === 0 || !warehouseId) {
+    return result;
+  }
+
+  const stocks = await dbPrisma.productStock.findMany({
+    where: { productId: { in: productIds }, warehouseId },
+    select: { productId: true, quantity: true },
+  });
+  for (const stock of stocks) {
+    result[stock.productId] = stock.quantity;
+  }
+  return result;
+}
