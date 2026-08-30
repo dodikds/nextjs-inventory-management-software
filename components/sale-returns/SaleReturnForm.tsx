@@ -6,6 +6,7 @@ import { Calendar, Check, Minus, Pencil, Plus, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
+import { createSaleReturn } from "@/app/(dashboard)/sales/returns/actions";
 // Reused as-is from Sales — design/Edit Sale Return.html's item-edit modal
 // has the exact same fields/labels ("Product Price"/"Sale Unit") as
 // design/Create Sale.html's own, so a duplicate would just be the same 166
@@ -129,8 +130,44 @@ export default function SaleReturnForm({ units, data }: SaleReturnFormProps) {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
     startSaveTransition(async () => {
-      toast("Saving isn't wired up yet — coming in the next step.");
+      // Editing isn't wired up yet — updateSaleReturn is a later step
+      // (reconciling stock by difference, not a blind re-increment).
+      if (isEditing) {
+        toast("Editing isn't wired up yet — coming in a later step.");
+        return;
+      }
+
+      const payload = {
+        saleId: data.saleId,
+        date,
+        status,
+        items: items.map((item) => ({
+          productId: item.productId,
+          unitPrice: item.unitPrice,
+          quantity: item.quantity,
+          discountType: item.discountType,
+          discount: item.discount,
+          taxType: item.taxType,
+          orderTax: item.orderTax,
+          unit: item.unit,
+        })),
+        orderTax: orderTaxPercent,
+        discount,
+        shipping,
+        notes: notes || undefined,
+      };
+
+      const result = await createSaleReturn(payload);
+
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+
+      toast.success("Sale return created");
+      router.push("/sales/returns");
     });
   }
 
