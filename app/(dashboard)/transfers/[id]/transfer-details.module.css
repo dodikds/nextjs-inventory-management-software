@@ -1,0 +1,10 @@
+/* Ported from Purchase Details.html's own <style> block, same as
+   ../../purchases/[id]/purchase-details.module.css. .pd-title, .info-grid,
+   .info-panel, .band, .info-body, .info-row, and .info-line are NOT here —
+   they're already promoted to app/gildedglow.css (shared with other
+   "Details" pages) — only totals-box/totals-row aren't global yet. */
+.totals-box { width: 480px; margin-left: auto; border: 1px solid var(--gray-200); border-radius: var(--r-md); overflow: hidden; margin-top: var(--sp-6); }
+.totals-row { display: flex; justify-content: space-between; padding: 14px var(--sp-5); border-bottom: 1px solid var(--gray-150); }
+.totals-row:last-child { border-bottom: none; }
+.totals-row .lbl { color: var(--gray-600); }
+.totals-row.grand .lbl, .totals-row.grand .val { color: var(--primary); font-family: var(--font-display); font-weight: 700; font-size: 16px; }
