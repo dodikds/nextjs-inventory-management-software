@@ -8,8 +8,8 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
-import { adjustProductStock, InsufficientStockError } from "@/lib/stock";
-import { saleSchema, salePaymentSchema } from "@/lib/validation/sale";
+import { adjustProductStock, computeStockDeltas, InsufficientStockError } from "@/lib/stock";
+import { saleSchema, salePaymentSchema, updateSaleSchema } from "@/lib/validation/sale";
 
 const idSchema = z.string().trim().min(1, "Invalid sale id");
 
@@ -277,6 +277,205 @@ export async function createSale(input: unknown): Promise<CreateSaleResult> {
   }
 
   return { success: true, id: saleId };
+}
+
+export type UpdateSaleResult = { success: true; id: string } | { success: false; message: string };
+
+// Reuses SaleForm in edit mode (pre-filled — see
+// app/(dashboard)/sales/[id]/edit/page.tsx) and the same validate-then-
+// recompute path as createSale above, with two deliberate differences:
+// stock is reconciled by DIFFERENCE (never re-runs createSale's "decrement
+// for every Received line"), and payment history is never touched — the
+// validated input (updateSaleSchema) doesn't even carry `paid`/
+// `paymentType`, so there's no value here that could overwrite them. Real
+// payments only ever change through createSale's initial one and
+// addSalePayment (see the "Show Payments" flow) — see the comment further
+// down on how `due`/`paymentStatus` still stay correct after an edit
+// without touching a single SalePayment row.
+export async function updateSale(id: string, input: unknown): Promise<UpdateSaleResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_sales")) {
+    return { success: false, message: "You don't have permission to manage sales" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid sale" };
+  }
+
+  const parsed = updateSaleSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const { date, warehouseId, customerId, items, orderTax, discount, shipping, status, notes } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  // Same re-validation as createSale — the submitted ids still arrive as
+  // plain values from a client call.
+  const [warehouse, customer, products] = await Promise.all([
+    dbPrisma.warehouse.findFirst({ where: { id: warehouseId, deletedAt: null } }),
+    dbPrisma.customer.findFirst({ where: { id: customerId, deletedAt: null } }),
+    dbPrisma.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) }, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!warehouse) {
+    return { success: false, message: "Please choose a valid warehouse" };
+  }
+  if (!customer) {
+    return { success: false, message: "Please choose a valid customer" };
+  }
+  if (products.length !== items.length) {
+    return { success: false, message: "One or more products are no longer available" };
+  }
+
+  const itemTotals = items.map((item) =>
+    calculateLineTotals({
+      unitCost: item.unitPrice,
+      quantity: item.quantity,
+      discountType: item.discountType,
+      discount: item.discount,
+      taxType: item.taxType,
+      taxRate: item.orderTax,
+    }),
+  );
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: itemTotals.map((total) => total.subtotal),
+    orderTaxRate: orderTax,
+    discount,
+    shipping,
+  });
+
+  let oldProductIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      // Read the sale's state as it was before this save — both for the
+      // 404 check and as the "old" side of the stock reconciliation below —
+      // inside the same transaction as the writes that follow.
+      const existing = await tx.sale.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new SaleNotFoundError();
+      }
+      oldProductIds = existing.items.map((item) => item.productId);
+
+      // Simplest correct way to let items be arbitrarily added, removed, or
+      // edited between saves: replace the whole set rather than diffing and
+      // patching individual SaleItem rows. The reference is never
+      // regenerated on edit.
+      await tx.saleItem.deleteMany({ where: { saleId: parsedId.data } });
+
+      // paid/due/paymentStatus/paymentType are deliberately absent from
+      // this `data` object — `paid` stays exactly the sum of this sale's
+      // real SalePayment rows (untouched), but `due`/`paymentStatus` are
+      // still recomputed against the NEW grandTotal below, so editing an
+      // order's total doesn't leave a stale "amount owed" behind even
+      // though no new payment was recorded.
+      const existingPaid = new Decimal(existing.paid.toString());
+      const due = Decimal.max(0, orderTotals.grandTotal.minus(existingPaid));
+      const paymentStatus = derivePaymentStatus(existingPaid, orderTotals.grandTotal);
+
+      await tx.sale.update({
+        where: { id: parsedId.data },
+        data: {
+          warehouseId,
+          customerId,
+          date: parsedDate,
+          status,
+          orderTax,
+          discount,
+          shipping,
+          grandTotal: orderTotals.grandTotal.toFixed(2),
+          due: due.toFixed(2),
+          paymentStatus,
+          notes: notes || null,
+          items: {
+            create: items.map((item, index) => ({
+              productId: item.productId,
+              netUnitPrice: item.unitPrice,
+              quantity: item.quantity,
+              discountType: item.discountType,
+              discount: item.discount,
+              taxType: item.taxType,
+              orderTax: item.orderTax,
+              unit: item.unit,
+              subtotal: itemTotals[index].subtotal.toFixed(2),
+            })),
+          },
+        },
+      });
+
+      // Stock reconciliation — the mirror image of updatePurchase's own
+      // (see ../purchases/actions.ts), same inverted-sign approach as
+      // updatePurchaseReturn: a Sale's contributing quantities SUBTRACT
+      // stock (the opposite of Purchase's ADD), so every quantity passed to
+      // computeStockDeltas here is negated first. It then computes
+      // (-newQty) - (-oldQty) = oldQty - newQty per (warehouse, product) —
+      // exactly the delta this decrementing module needs: reverse the old
+      // sale's decrement (+oldQty) and apply the new one (-newQty). A
+      // status flip nets to the full old/new amount, an added/removed item
+      // nets to a pure +/-, and a warehouse change reverses the old
+      // warehouse and applies the new one separately — all for free from
+      // computeStockDeltas' existing math. adjustProductStock's own
+      // negative-stock guard still applies to the net result, so an edit
+      // still can't be saved if it would take a warehouse below zero. This
+      // is the only place this action touches stock; createSale's
+      // "decrement for every Received line" is never called again here.
+      const oldQuantities =
+        existing.status === "RECEIVED"
+          ? existing.items.map((item) => ({ productId: item.productId, quantity: -item.quantity }))
+          : [];
+      const newQuantities =
+        status === "RECEIVED" ? items.map((item) => ({ productId: item.productId, quantity: -item.quantity })) : [];
+
+      const deltas = computeStockDeltas({
+        oldWarehouseId: existing.warehouseId,
+        oldQuantities,
+        newWarehouseId: warehouseId,
+        newQuantities,
+      });
+      for (const delta of deltas) {
+        await adjustProductStock(tx, delta);
+      }
+    });
+  } catch (error) {
+    if (error instanceof SaleNotFoundError) {
+      return { success: false, message: "Sale not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `${product?.name ?? "That product"} doesn't have enough stock in ${warehouseRow?.name ?? "that warehouse"} for this change — some of it may already be committed elsewhere`,
+      };
+    }
+    throw error;
+  }
+
+  // Revalidate every product that either contributed stock before this edit
+  // or does now — the union covers items that were added, removed, or just
+  // changed quantity.
+  revalidatePath("/sales");
+  revalidatePath(`/sales/${parsedId.data}`);
+  revalidatePath("/products");
+  const affectedProductIds = new Set([...oldProductIds, ...items.map((item) => item.productId)]);
+  for (const productId of affectedProductIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true, id: parsedId.data };
 }
 
 export type SalePaymentsModalData = {

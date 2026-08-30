@@ -47,6 +47,13 @@ export const saleSchema = z.object({
 export type SaleInput = z.infer<typeof saleSchema>;
 export type SaleItemInput = z.infer<typeof saleItemSchema>;
 
+// Editing a sale must never be able to touch its payment history (see
+// updateSale's own comment) — `paid`/`paymentType` are only ever written by
+// createSale (the initial payment) and addSalePayment (every payment
+// after), so the edit form's payload doesn't carry them at all.
+export const updateSaleSchema = saleSchema.omit({ paid: true, paymentType: true });
+export type UpdateSaleInput = z.infer<typeof updateSaleSchema>;
+
 // For the "Show Payments" add-payment form (see SalePaymentsModal) — a
 // separate schema from the rest of Sale's fields since it's submitted on
 // its own, against an existing sale, not as part of the create/edit form.
