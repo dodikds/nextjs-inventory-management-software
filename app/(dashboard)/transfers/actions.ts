@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
-import { adjustProductStock, InsufficientStockError } from "@/lib/stock";
+import { adjustProductStock, computeStockDeltas, InsufficientStockError, type ProductQuantity } from "@/lib/stock";
 import { transferSchema } from "@/lib/validation/transfer";
 
 const idSchema = z.string().trim().min(1, "Invalid transfer id");
@@ -254,6 +254,230 @@ export async function createTransfer(input: unknown): Promise<CreateTransferResu
   }
 
   return { success: true, id: transferId };
+}
+
+class TransferNotFoundError extends Error {}
+
+export type UpdateTransferResult = { success: true; id: string } | { success: false; message: string };
+
+// Reuses TransferForm in edit mode (pre-filled — see
+// app/(dashboard)/transfers/[id]/edit/page.tsx) and the same validate-then-
+// recompute path as createTransfer above. The careful part — per AGENTS.md's
+// own framing of this whole module — is how it touches stock: it never
+// re-runs createTransfer's "decrement From, increment To for every line"
+// logic, since a transfer already COMPLETED once already applied its share
+// of that move; doing it again would double it. See the reconciliation
+// block below.
+export async function updateTransfer(id: string, input: unknown): Promise<UpdateTransferResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_transfers")) {
+    return { success: false, message: "You don't have permission to manage transfers" };
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid transfer" };
+  }
+
+  const parsed = transferSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const { fromWarehouseId, toWarehouseId, date, status, items, orderTax, discount, shipping, notes } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  // Same re-validation as createTransfer — the submitted ids still arrive
+  // as plain values from a client call.
+  const [fromWarehouse, toWarehouse, products] = await Promise.all([
+    dbPrisma.warehouse.findFirst({ where: { id: fromWarehouseId, deletedAt: null } }),
+    dbPrisma.warehouse.findFirst({ where: { id: toWarehouseId, deletedAt: null } }),
+    dbPrisma.product.findMany({
+      where: { id: { in: items.map((item) => item.productId) }, deletedAt: null },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!fromWarehouse) {
+    return { success: false, message: "Please choose a valid From warehouse" };
+  }
+  if (!toWarehouse) {
+    return { success: false, message: "Please choose a valid To warehouse" };
+  }
+  if (products.length !== items.length) {
+    return { success: false, message: "One or more products are no longer available" };
+  }
+
+  const itemTotals = items.map((item) =>
+    calculateLineTotals({
+      unitCost: item.unitCost,
+      quantity: item.quantity,
+      discountType: item.discountType,
+      discount: item.discount,
+      taxType: item.taxType,
+      taxRate: item.orderTax,
+    }),
+  );
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: itemTotals.map((total) => total.subtotal),
+    orderTaxRate: orderTax,
+    discount,
+    shipping,
+  });
+
+  // Negates every quantity in a list before it's handed to
+  // computeStockDeltas. That utility's own convention (see lib/stock.ts) is
+  // built around a *positive* contribution — Purchase/Sale Return-shaped:
+  // "old quantities" get removed (negated), "new quantities" get added — so
+  // it nets a warehouse gaining stock correctly on its own. A transfer's To
+  // warehouse gains stock the exact same way, but its From warehouse LOSES
+  // stock instead — the opposite sign. Negating both lists before the call
+  // flips the convention exactly: the (already-negated) old quantities get
+  // removed again, i.e. added back — reversing the past subtraction — and
+  // the (already-negated) new quantities get added, i.e. subtracted —
+  // applying the new one. Reusing the shared utility this way (twice, once
+  // per warehouse side) avoids a bespoke second copy of its diffing logic.
+  function negate(quantities: ProductQuantity[]): ProductQuantity[] {
+    return quantities.map((q) => ({ productId: q.productId, quantity: -q.quantity }));
+  }
+
+  let oldProductIds: string[] = [];
+  try {
+    await dbPrisma.$transaction(async (tx) => {
+      // Read the transfer's state as it was before this save — both for
+      // the 404 check and as the "old" side of the stock reconciliation
+      // below — inside the same transaction as the writes that follow, so
+      // nothing else can change it in between.
+      const existing = await tx.transfer.findFirst({
+        where: { id: parsedId.data, deletedAt: null },
+        include: { items: true },
+      });
+      if (!existing) {
+        throw new TransferNotFoundError();
+      }
+      oldProductIds = existing.items.map((item) => item.productId);
+
+      // Simplest correct way to let items be arbitrarily added, removed, or
+      // edited between saves: replace the whole set rather than diffing and
+      // patching individual TransferItem rows. The reference itself is
+      // never regenerated on edit.
+      await tx.transferItem.deleteMany({ where: { transferId: parsedId.data } });
+
+      await tx.transfer.update({
+        where: { id: parsedId.data },
+        data: {
+          fromWarehouseId,
+          toWarehouseId,
+          date: parsedDate,
+          status,
+          orderTax,
+          discount,
+          shipping,
+          grandTotal: orderTotals.grandTotal.toFixed(2),
+          notes: notes || null,
+          items: {
+            create: items.map((item, index) => ({
+              productId: item.productId,
+              netUnitCost: item.unitCost,
+              quantity: item.quantity,
+              discountType: item.discountType,
+              discount: item.discount,
+              taxType: item.taxType,
+              orderTax: item.orderTax,
+              unit: item.unit,
+              subtotal: itemTotals[index].subtotal.toFixed(2),
+            })),
+          },
+        },
+      });
+
+      // Stock reconciliation — the critical part. A Transfer only ever
+      // moved stock while its status was COMPLETED (see createTransfer's
+      // own in-transit-rule comment above), so "what did the old state
+      // contribute" is the old item quantities if `existing.status` was
+      // COMPLETED, or nothing otherwise — and likewise for the new state
+      // against `status`. This single pair of lists is reused for BOTH
+      // warehouse sides below, since a plain quantity change, a status
+      // flip, an item added/removed, or the warehouse itself changing (old
+      // ≠ new fromWarehouseId/toWarehouseId — computeStockDeltas keeps
+      // those as two separate keys rather than netting them, so the old
+      // warehouse's contribution is correctly reversed while the new one's
+      // is correctly applied) all fall out of the same diff.
+      const oldQuantities: ProductQuantity[] =
+        existing.status === "COMPLETED"
+          ? existing.items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
+          : [];
+      const newQuantities: ProductQuantity[] =
+        status === "COMPLETED" ? items.map((item) => ({ productId: item.productId, quantity: item.quantity })) : [];
+
+      // To warehouse: a transfer ADDS stock here — the same positive
+      // direction computeStockDeltas already assumes, so its quantities go
+      // in as-is.
+      const toDeltas = computeStockDeltas({
+        oldWarehouseId: existing.toWarehouseId,
+        oldQuantities,
+        newWarehouseId: toWarehouseId,
+        newQuantities,
+      });
+
+      // From warehouse: the opposite direction — negated, per the `negate`
+      // comment above.
+      const fromDeltas = computeStockDeltas({
+        oldWarehouseId: existing.fromWarehouseId,
+        oldQuantities: negate(oldQuantities),
+        newWarehouseId: fromWarehouseId,
+        newQuantities: negate(newQuantities),
+      });
+
+      // Each delta here is already the final NET change for one (warehouse,
+      // product) pair — not a separate "reverse" write followed by a
+      // separate "reapply" write — so applying them in any order can never
+      // trip adjustProductStock's negative-stock guard on some transient
+      // in-between state; it only ever sees the one real ending state. That
+      // guard is still very much live, though: if the new quantities net
+      // out to more than fromWarehouseId currently has on hand, this throws
+      // and rolls back everything above, including the transfer/items
+      // update.
+      for (const delta of [...toDeltas, ...fromDeltas]) {
+        await adjustProductStock(tx, delta);
+      }
+    });
+  } catch (error) {
+    if (error instanceof TransferNotFoundError) {
+      return { success: false, message: "Transfer not found" };
+    }
+    if (error instanceof InsufficientStockError) {
+      const [product, warehouseRow] = await Promise.all([
+        dbPrisma.product.findUnique({ where: { id: error.productId }, select: { name: true } }),
+        dbPrisma.warehouse.findUnique({ where: { id: error.warehouseId }, select: { name: true } }),
+      ]);
+      return {
+        success: false,
+        message: `${product?.name ?? "One of these products"} doesn't have enough stock in ${warehouseRow?.name ?? "that warehouse"} for this change — some of it may already have been moved or sold elsewhere`,
+      };
+    }
+    if (isDuplicateReferenceError(error)) {
+      return { success: false, message: "That reference number was just taken — please try saving again" };
+    }
+    throw error;
+  }
+
+  // Revalidate every product that either contributed stock before this edit
+  // or does now — the union covers items that were added, removed, or kept
+  // — plus every route where their stock is visible.
+  revalidatePath("/transfers");
+  revalidatePath(`/transfers/${parsedId.data}`);
+  revalidatePath("/products");
+  const affectedProductIds = new Set([...oldProductIds, ...items.map((item) => item.productId)]);
+  for (const productId of affectedProductIds) {
+    revalidatePath(`/products/${productId}`);
+  }
+
+  return { success: true, id: parsedId.data };
 }
 
 export type DeleteTransferResult = { success: true } | { success: false; message: string };

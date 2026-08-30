@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import {
   searchProductsForTransfer,
   createTransfer,
+  updateTransfer,
   type TransferProductSearchResult,
 } from "@/app/(dashboard)/transfers/actions";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
@@ -213,14 +214,6 @@ export default function TransferForm({ warehouses, units, initialData }: Transfe
     e.preventDefault();
 
     startSaveTransition(async () => {
-      // Editing isn't wired up yet — updateTransfer is a later step
-      // (reconciling both warehouses by difference, not re-running
-      // create's stock move, which would double it).
-      if (isEditing) {
-        toast("Editing isn't wired up yet — coming in a later step.");
-        return;
-      }
-
       const payload = {
         date,
         fromWarehouseId,
@@ -242,15 +235,15 @@ export default function TransferForm({ warehouses, units, initialData }: Transfe
         notes: notes || undefined,
       };
 
-      const result = await createTransfer(payload);
+      const result = isEditing ? await updateTransfer(initialData.id, payload) : await createTransfer(payload);
 
       if (!result.success) {
         toast.error(result.message);
         return;
       }
 
-      toast.success("Transfer created");
-      router.push("/transfers");
+      toast.success(isEditing ? "Transfer updated" : "Transfer created");
+      router.push(isEditing ? `/transfers/${result.id}` : "/transfers");
     });
   }
 
