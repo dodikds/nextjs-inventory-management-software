@@ -6,6 +6,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import { CornerUpRight, DollarSign, Eye, FileDown, MoreVertical, Pencil, Trash2, X } from "lucide-react";
 import { deleteSale } from "@/app/(dashboard)/sales/actions";
+import SalePaymentsModal from "./SalePaymentsModal";
 import styles from "./SaleRowActions.module.css";
 
 type SaleRowActionsProps = {
@@ -19,6 +20,7 @@ export default function SaleRowActions({ id, reference }: SaleRowActionsProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isPaymentsOpen, setIsPaymentsOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const cellRef = useRef<HTMLDivElement>(null);
 
@@ -89,10 +91,7 @@ export default function SaleRowActions({ id, reference }: SaleRowActionsProps) {
               className="gg-menu-item"
               onClick={() => {
                 closeMenu();
-                // The payment history/add-payment flow is a later step —
-                // this menu item exists now (matching the design) but isn't
-                // wired to a real modal yet.
-                toast("Payments aren't wired up yet — coming in a later step.");
+                setIsPaymentsOpen(true);
               }}
             >
               <DollarSign /> Show Payments
@@ -154,6 +153,10 @@ export default function SaleRowActions({ id, reference }: SaleRowActionsProps) {
           </div>
         </div>
       </div>
+
+      {isPaymentsOpen && (
+        <SalePaymentsModal saleId={id} reference={reference} onClose={() => setIsPaymentsOpen(false)} />
+      )}
     </>
   );
 }

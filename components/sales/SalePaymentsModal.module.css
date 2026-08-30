@@ -1,0 +1,12 @@
+/* Not from a design mockup — no design/*.html covers a payments panel, so
+   this borrows the app's existing modal/field/table language
+   (gg-modal, gg-field, gg-table) rather than inventing new visual patterns. */
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-4); padding: var(--sp-4) var(--sp-5); background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--r-md); }
+.summary-item { display: flex; flex-direction: column; gap: 4px; }
+.summary-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--gray-500); }
+.summary-value { font-family: var(--font-display); font-weight: 600; font-size: 15px; color: var(--ink); }
+
+.section-label { display: block; margin-bottom: var(--sp-3); }
+
+.add-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
+.add-form .full { grid-column: 1 / -1; }

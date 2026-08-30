@@ -46,3 +46,15 @@ export const saleSchema = z.object({
 
 export type SaleInput = z.infer<typeof saleSchema>;
 export type SaleItemInput = z.infer<typeof saleItemSchema>;
+
+// For the "Show Payments" add-payment form (see SalePaymentsModal) — a
+// separate schema from the rest of Sale's fields since it's submitted on
+// its own, against an existing sale, not as part of the create/edit form.
+export const salePaymentSchema = z.object({
+  amount: decimalString.refine((value) => Number(value) > 0, "Amount must be greater than zero"),
+  paymentType: z.string().trim().min(1, "Please choose a payment type"),
+  date: z.string().trim().min(1, "Please choose a date"),
+  notes: z.string().trim().max(500, "Notes are too long").optional(),
+});
+
+export type SalePaymentInput = z.infer<typeof salePaymentSchema>;

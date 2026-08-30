@@ -588,14 +588,19 @@ export default function SaleForm({ warehouses, customers, units, initialData }: 
             <label className="gg-label" htmlFor="paymentType">
               Payment Type
             </label>
-            <input
+            <select
               id="paymentType"
-              className="gg-input"
-              placeholder="e.g. Cash"
+              className="gg-select"
               value={isEditing ? initialData.paymentType : initialPaymentType}
               onChange={(e) => setInitialPaymentType(e.target.value)}
               disabled={isEditing}
-            />
+            >
+              <option value="">Choose Payment Type</option>
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Cheque">Cheque</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
           </div>
           <div className="gg-field">
             <label className="gg-label" htmlFor="paymentStatus">

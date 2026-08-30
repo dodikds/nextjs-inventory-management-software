@@ -9,7 +9,7 @@ import { hasPermission } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { calculateLineTotals, calculateOrderTotals } from "@/lib/pricing";
 import { adjustProductStock, InsufficientStockError } from "@/lib/stock";
-import { saleSchema } from "@/lib/validation/sale";
+import { saleSchema, salePaymentSchema } from "@/lib/validation/sale";
 
 const idSchema = z.string().trim().min(1, "Invalid sale id");
 
@@ -277,6 +277,154 @@ export async function createSale(input: unknown): Promise<CreateSaleResult> {
   }
 
   return { success: true, id: saleId };
+}
+
+export type SalePaymentsModalData = {
+  reference: string;
+  grandTotal: string;
+  paid: string;
+  due: string;
+  paymentStatus: SalePaymentStatus;
+  payments: {
+    id: string;
+    amount: string;
+    paymentType: string;
+    /** ISO date string — SalePaymentsModal formats it for display. */
+    date: string;
+    notes: string | null;
+  }[];
+};
+
+// Read-only, called directly from SalePaymentsModal when it opens (a
+// client component — the modal is triggered from the list's row actions,
+// so this has to be a callable action, not a page-level server-component
+// fetch). Returns null on a bad id or if the sale is missing/deleted,
+// rather than throwing, since the modal just shows an error toast either
+// way.
+export async function getSalePaymentsForModal(saleId: string): Promise<SalePaymentsModalData | null> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_sales")) {
+    return null;
+  }
+
+  const parsedId = idSchema.safeParse(saleId);
+  if (!parsedId.success) {
+    return null;
+  }
+
+  const sale = await dbPrisma.sale.findFirst({
+    where: { id: parsedId.data, deletedAt: null },
+    include: { payments: { orderBy: { date: "desc" } } },
+  });
+  if (!sale) {
+    return null;
+  }
+
+  return {
+    reference: sale.reference,
+    grandTotal: sale.grandTotal.toString(),
+    paid: sale.paid.toString(),
+    due: sale.due.toString(),
+    paymentStatus: sale.paymentStatus,
+    payments: sale.payments.map((payment) => ({
+      id: payment.id,
+      amount: payment.amount.toString(),
+      paymentType: payment.paymentType,
+      date: payment.date.toISOString(),
+      notes: payment.notes,
+    })),
+  };
+}
+
+export type AddSalePaymentResult =
+  | { success: true; sale: { paid: string; due: string; paymentStatus: SalePaymentStatus; paymentType: string } }
+  | { success: false; message: string };
+
+// Called from SalePaymentsModal's add-payment form. Every payment is its
+// own SalePayment row (see that model's schema comment) — paid/due/
+// paymentStatus on Sale are then recomputed from the real SUM of every
+// payment row against grandTotal, never incremented in place, so this
+// stays correct even if a future feature edits or removes a payment. The
+// modal's own summary and the sale's list/detail rows are all driven by
+// this same recomputed state, kept in sync via revalidatePath below.
+export async function addSalePayment(saleId: string, input: unknown): Promise<AddSalePaymentResult> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_sales")) {
+    return { success: false, message: "You don't have permission to manage sales" };
+  }
+
+  const parsedId = idSchema.safeParse(saleId);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid sale" };
+  }
+
+  const parsed = salePaymentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, message: parsed.error.issues[0]?.message ?? "Please fix the errors below" };
+  }
+
+  const parsedDate = new Date(parsed.data.date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { success: false, message: "Please choose a valid date" };
+  }
+
+  let result: { paid: string; due: string; paymentStatus: SalePaymentStatus; paymentType: string };
+  try {
+    result = await dbPrisma.$transaction(async (tx) => {
+      const existing = await tx.sale.findFirst({ where: { id: parsedId.data, deletedAt: null } });
+      if (!existing) {
+        throw new SaleNotFoundError();
+      }
+
+      await tx.salePayment.create({
+        data: {
+          saleId: parsedId.data,
+          amount: parsed.data.amount,
+          paymentType: parsed.data.paymentType,
+          date: parsedDate,
+          notes: parsed.data.notes || null,
+        },
+      });
+
+      const aggregate = await tx.salePayment.aggregate({
+        where: { saleId: parsedId.data },
+        _sum: { amount: true },
+      });
+      const paidAmount = new Decimal(aggregate._sum.amount ?? 0);
+      const grandTotal = new Decimal(existing.grandTotal.toString());
+      const due = Decimal.max(0, grandTotal.minus(paidAmount));
+      const paymentStatus = derivePaymentStatus(paidAmount, grandTotal);
+
+      // The list's "Payment Type" chip (design/Sales.html) shows the most
+      // recent payment's method — see the Sale model's own schema comment.
+      const sale = await tx.sale.update({
+        where: { id: parsedId.data },
+        data: {
+          paid: paidAmount.toFixed(2),
+          due: due.toFixed(2),
+          paymentStatus,
+          paymentType: parsed.data.paymentType,
+        },
+      });
+
+      return {
+        paid: sale.paid.toString(),
+        due: sale.due.toString(),
+        paymentStatus: sale.paymentStatus,
+        paymentType: sale.paymentType ?? parsed.data.paymentType,
+      };
+    });
+  } catch (error) {
+    if (error instanceof SaleNotFoundError) {
+      return { success: false, message: "Sale not found" };
+    }
+    throw error;
+  }
+
+  revalidatePath("/sales");
+  revalidatePath(`/sales/${parsedId.data}`);
+
+  return { success: true, sale: result };
 }
 
 export type DeleteSaleResult = { success: true } | { success: false; message: string };
