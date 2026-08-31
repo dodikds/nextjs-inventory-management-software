@@ -16,16 +16,25 @@ export function parsePage(value: string | undefined): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
 }
 
-type GetExpenseCategoriesParams = {
+type GetExpensesParams = {
   q?: string;
   page: number;
   perPage: number;
 };
 
-export async function getExpenseCategories({ q, page, perPage }: GetExpenseCategoriesParams) {
-  const where: Prisma.ExpenseCategoryWhereInput = {
+export async function getExpenses({ q, page, perPage }: GetExpensesParams) {
+  const where: Prisma.ExpenseWhereInput = {
     deletedAt: null,
-    ...(q ? { name: { contains: q } } : {}),
+    ...(q
+      ? {
+          OR: [
+            { reference: { contains: q } },
+            { title: { contains: q } },
+            { warehouse: { name: { contains: q } } },
+            { category: { name: { contains: q } } },
+          ],
+        }
+      : {}),
   };
 
   // Interactive transaction so the count and the findMany run together
@@ -33,25 +42,24 @@ export async function getExpenseCategories({ q, page, perPage }: GetExpenseCateg
   // out-of-range page before it's used to compute "skip" — a stale
   // bookmark or hand-edited URL otherwise produces a "skip" past the end
   // of the result set and a nonsensical range display.
-  const { categories, total, page: safePage } = await dbPrisma.$transaction(async (tx) => {
-    const total = await tx.expenseCategory.count({ where });
+  const { expenses, total, page: safePage } = await dbPrisma.$transaction(async (tx) => {
+    const total = await tx.expense.count({ where });
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safePage = Math.min(Math.max(page, 1), totalPages);
 
-    const categories = await tx.expenseCategory.findMany({
+    const expenses = await tx.expense.findMany({
       where,
+      include: {
+        warehouse: { select: { name: true } },
+        category: { select: { name: true } },
+      },
       orderBy: { createdAt: "desc" },
       skip: (safePage - 1) * perPage,
       take: perPage,
     });
 
-    return { categories, total, page: safePage };
+    return { expenses, total, page: safePage };
   });
 
-  return { categories, total, page: safePage };
-}
-
-export async function isExpenseCategoryInUse(id: string): Promise<boolean> {
-  const count = await dbPrisma.expense.count({ where: { expenseCategoryId: id, deletedAt: null } });
-  return count > 0;
+  return { expenses, total, page: safePage };
 }

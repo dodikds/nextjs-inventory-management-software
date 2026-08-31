@@ -56,6 +56,7 @@ model Warehouse {
   saleReturns     SaleReturn[]
   transfersFrom   Transfer[]       @relation("TransferFrom")
   transfersTo     Transfer[]       @relation("TransferTo")
+  expenses        Expense[]
 
   @@map("warehouses")
 }
@@ -124,18 +125,27 @@ model ExpenseCategory {
   @@map("expense_categories")
 }
 
-// Minimal scaffold for the categoryId relation the Expense Categories
-// delete-guard needs — the full Expenses feature (title, amount, warehouse,
-// date, details per design/Create Expense.html) is built separately.
+// A money-out record only — no stock effect and no line items, unlike
+// Purchase/Sale/Adjustment/Transfer. `reference` follows the same
+// "EX_0001"-style numbering every other document module hand-rolls (see
+// createExpense in app/(dashboard)/expenses/actions.ts).
 model Expense {
-  id         String          @id @default(cuid())
-  categoryId String
-  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
-  deletedAt  DateTime?
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  id                String          @id @default(cuid())
+  reference         String          @unique
+  date              DateTime
+  title             String
+  warehouseId       String
+  warehouse         Warehouse       @relation(fields: [warehouseId], references: [id])
+  expenseCategoryId String
+  category          ExpenseCategory @relation(fields: [expenseCategoryId], references: [id])
+  amount            Decimal         @db.Decimal(12, 2)
+  details           String?         @db.Text
+  deletedAt         DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
-  @@index([categoryId])
+  @@index([warehouseId])
+  @@index([expenseCategoryId])
   @@index([createdAt])
   @@map("expenses")
 }
