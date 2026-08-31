@@ -16,9 +16,17 @@ type MasterDataModalProps = {
   entityLabel: string;
   createAction: (formData: FormData) => Promise<MasterDataActionResult>;
   updateAction: (id: string, formData: FormData) => Promise<MasterDataActionResult>;
+  // Name-only modules (Expense Categories, ...) pass false to drop the logo
+  // upload field entirely. Defaults to true to match every existing caller.
+  hasLogo?: boolean;
 };
 
-export default function MasterDataModal({ entityLabel, createAction, updateAction }: MasterDataModalProps) {
+export default function MasterDataModal({
+  entityLabel,
+  createAction,
+  updateAction,
+  hasLogo = true,
+}: MasterDataModalProps) {
   const router = useRouter();
   const { state, close } = useMasterDataModal();
   const isOpen = state.mode !== "closed";
@@ -94,7 +102,7 @@ export default function MasterDataModal({ entityLabel, createAction, updateActio
 
     const formData = new FormData();
     formData.set("name", name);
-    if (logoFile) formData.set("logo", logoFile);
+    if (hasLogo && logoFile) formData.set("logo", logoFile);
 
     startTransition(async () => {
       const result = state.mode === "edit" ? await updateAction(state.row.id, formData) : await createAction(formData);
@@ -160,27 +168,29 @@ export default function MasterDataModal({ entityLabel, createAction, updateActio
                 </span>
               )}
             </div>
-            <div className="gg-field">
-              <label className="gg-label">Change Logo</label>
-              <div className="logo-drop">
-                {avatarSrc ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- locally uploaded logo, not an optimizable remote asset
-                  <img src={avatarSrc} alt="" />
-                ) : (
-                  <ImageIcon className="ph" />
-                )}
-                <button type="button" className="logo-edit" title="Change logo" onClick={handleLogoClick}>
-                  <Pencil />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="file-input"
-                  onChange={handleLogoChange}
-                />
+            {hasLogo && (
+              <div className="gg-field">
+                <label className="gg-label">Change Logo</label>
+                <div className="logo-drop">
+                  {avatarSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- locally uploaded logo, not an optimizable remote asset
+                    <img src={avatarSrc} alt="" />
+                  ) : (
+                    <ImageIcon className="ph" />
+                  )}
+                  <button type="button" className="logo-edit" title="Change logo" onClick={handleLogoClick}>
+                    <Pencil />
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="file-input"
+                    onChange={handleLogoChange}
+                  />
+                </div>
               </div>
-            </div>
+            )}
           </div>
           <div className="gg-modal-foot">
             <button className="gg-btn gg-btn--primary" type="submit" disabled={isPending}>

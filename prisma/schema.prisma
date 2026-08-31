@@ -110,6 +110,36 @@ model Category {
   @@map("categories")
 }
 
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  expenses Expense[]
+
+  @@index([name])
+  @@index([createdAt])
+  @@map("expense_categories")
+}
+
+// Minimal scaffold for the categoryId relation the Expense Categories
+// delete-guard needs — the full Expenses feature (title, amount, warehouse,
+// date, details per design/Create Expense.html) is built separately.
+model Expense {
+  id         String          @id @default(cuid())
+  categoryId String
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id])
+  deletedAt  DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@index([categoryId])
+  @@index([createdAt])
+  @@map("expenses")
+}
+
 // Backs the Product Unit dropdown on the Products create/edit form, the
 // same way Role backs the Role dropdown on Users — Product.productUnit
 // stores the unit's `name` as a plain string (not a foreign key) since

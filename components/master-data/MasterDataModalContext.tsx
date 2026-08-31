@@ -2,7 +2,9 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react";
 
-export type MasterDataRow = { id: string; name: string; logo: string | null };
+// `logo` is optional so name-only modules (Expense Categories, ...) can omit
+// it entirely rather than passing a permanent `null`.
+export type MasterDataRow = { id: string; name: string; logo?: string | null };
 
 // Shared result shape every master-data module's create/update server
 // actions return, and what MasterDataModal is typed against — so any new
@@ -32,8 +34,8 @@ const MasterDataModalContext = createContext<MasterDataModalContextValue | null>
 // rendered once per page rather than duplicated per row, matching the
 // design's own single `#overlay` element reused for both Create and Edit.
 //
-// Shared by every "name + logo" master-data module (Brands, Product
-// Categories, Units, ...) — each page mounts its own
+// Shared by every "name (+ optional logo)" master-data module (Product
+// Categories, Expense Categories, ...) — each page mounts its own
 // `<MasterDataModalProvider>` instance, so state never leaks between pages
 // even though they all use the same Context.
 export function MasterDataModalProvider({ children }: { children: ReactNode }) {

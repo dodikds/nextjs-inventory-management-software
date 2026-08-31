@@ -78,7 +78,7 @@ export const NAV: NavEntry[] = [
     icon: Wallet,
     children: [
       { label: "Expenses", href: "/expenses" },
-      { label: "Expense Categories", href: "/expenses/categories" },
+      { label: "Expense Categories", href: "/expense-categories" },
     ],
   },
   {

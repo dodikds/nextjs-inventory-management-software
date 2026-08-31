@@ -7,6 +7,7 @@ export type Permission =
   | "manage_users"
   | "manage_products"
   | "manage_product_categories"
+  | "manage_expense_categories"
   | "manage_adjustments"
   | "manage_purchases"
   | "manage_purchase_returns"
@@ -26,6 +27,7 @@ const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "manage_users",
     "manage_products",
     "manage_product_categories",
+    "manage_expense_categories",
     "manage_adjustments",
     "manage_purchases",
     "manage_purchase_returns",
