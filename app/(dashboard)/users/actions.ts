@@ -8,16 +8,11 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, ADMIN_ROLE_NAME } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { userCreateSchema, userEditSchema, type UserField } from "@/lib/validation/user";
 
 const idSchema = z.string().min(1, "Invalid user id");
-
-// The one role name that's allowed to manage users (see
-// lib/permissions.ts::ROLE_PERMISSIONS) — used below to decide whether a
-// user being deleted is "an admin" for the last-admin guard.
-const ADMIN_ROLE = "admin";
 
 const ALLOWED_IMAGE_TYPES: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -251,8 +246,8 @@ export async function deleteUser(id: string): Promise<UserActionResult> {
   // it, so the last remaining admin can never be deleted. Re-derived from a
   // fresh count against the database (not trusted from the client), so it
   // can't be bypassed by tampering with anything in the browser.
-  if (existing.role === ADMIN_ROLE) {
-    const adminCount = await dbPrisma.user.count({ where: { role: ADMIN_ROLE, deletedAt: null } });
+  if (existing.role === ADMIN_ROLE_NAME) {
+    const adminCount = await dbPrisma.user.count({ where: { role: ADMIN_ROLE_NAME, deletedAt: null } });
     if (adminCount <= 1) {
       return { success: false, error: "You can't delete the last remaining admin" };
     }

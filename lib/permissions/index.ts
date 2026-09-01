@@ -1,15 +1,8 @@
 import type { Session } from "next-auth";
-import type { Permission } from "./constants";
+import { ADMIN_ROLE_NAME, type Permission } from "./constants";
 
 export type { Permission };
-export { PERMISSIONS, PERMISSION_KEYS, isPermission, toPermissions } from "./constants";
-
-// The admin role always has every permission, regardless of what's stored
-// in its Role.permissions row — a safety net so editing the admin role's
-// checkboxes (Roles/Permissions module) can never lock every admin out of
-// the app. Matches the ADMIN_ROLE convention already used by the Users
-// module's last-admin delete guard (app/(dashboard)/users/actions.ts).
-const ADMIN_ROLE_NAME = "admin";
+export { PERMISSIONS, PERMISSION_KEYS, ADMIN_ROLE_NAME, isPermission, toPermissions } from "./constants";
 
 // session.user.permissions is populated fresh from Role.permissions on every
 // auth() call (see the `session` callback in auth.ts) rather than baked into

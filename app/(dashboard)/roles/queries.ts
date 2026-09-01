@@ -54,3 +54,8 @@ export async function getRoles({ q, page, perPage }: GetRolesParams) {
 export async function getRoleById(id: string) {
   return dbPrisma.role.findFirst({ where: { id, deletedAt: null } });
 }
+
+export async function isRoleInUse(id: string): Promise<boolean> {
+  const count = await dbPrisma.user.count({ where: { roleId: id, deletedAt: null } });
+  return count > 0;
+}

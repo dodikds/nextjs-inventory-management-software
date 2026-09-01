@@ -5,9 +5,10 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, ADMIN_ROLE_NAME } from "@/lib/permissions";
 import { dbPrisma } from "@/lib/db";
 import { roleSchema, type RoleInput } from "@/lib/validation/role";
+import { isRoleInUse } from "./queries";
 
 const idSchema = z.string().min(1, "Invalid role id");
 
@@ -108,6 +109,29 @@ export async function updateRole(
     return { message: "Role not found" };
   }
 
+  const keepsManageRoles = parsed.data.permissions.includes("manage_roles");
+
+  // The admin/super role must always retain Manage Roles — otherwise the
+  // Roles UI would show it as unable to manage roles while the runtime
+  // safety net in hasPermission() silently keeps letting it through, a
+  // confusing mismatch between what's saved and what's actually enforced.
+  if (existing.name === ADMIN_ROLE_NAME && !keepsManageRoles) {
+    return {
+      errors: { permissions: "The admin role must always retain Manage Roles" },
+      message: "Please fix the errors below",
+    };
+  }
+
+  // Can't save an edit that removes the acting user's own ability to manage
+  // roles — re-derived from the session's roleId (not anything the client
+  // sent), so it can't be bypassed by tampering with the request.
+  if (session?.user?.roleId === parsedId.data && !keepsManageRoles) {
+    return {
+      errors: { permissions: "You can't remove Manage Roles from your own role" },
+      message: "Please fix the errors below",
+    };
+  }
+
   try {
     await dbPrisma.role.update({ where: { id: parsedId.data }, data: parsed.data });
   } catch (error) {
@@ -128,9 +152,6 @@ export type DeleteRoleResult = { success: true } | { success: false; error: stri
 // than via a hidden form field — `id` is just a plain argument from data the
 // server already rendered. The action still never trusts that the id is
 // real or current: it re-fetches and validates it itself before acting.
-//
-// No "role has users assigned" guard yet — that lockout lands in a later
-// step alongside the other Roles/Permissions guards.
 export async function deleteRole(id: string): Promise<DeleteRoleResult> {
   const session = await auth();
   if (!hasPermission(session, "manage_roles")) {
@@ -145,6 +166,14 @@ export async function deleteRole(id: string): Promise<DeleteRoleResult> {
   const existing = await dbPrisma.role.findFirst({ where: { id: parsedId.data, deletedAt: null } });
   if (!existing) {
     return { success: false, error: "Role not found" };
+  }
+
+  // Deleting a role that still has users assigned would leave them pointing
+  // at a soft-deleted role, so it's blocked instead — re-derived from a
+  // fresh lookup (not trusted from the client), so it can't be bypassed by
+  // tampering with anything in the browser.
+  if (await isRoleInUse(parsedId.data)) {
+    return { success: false, error: "This role has users assigned and can't be deleted" };
   }
 
   await dbPrisma.role.update({ where: { id: parsedId.data }, data: { deletedAt: new Date() } });

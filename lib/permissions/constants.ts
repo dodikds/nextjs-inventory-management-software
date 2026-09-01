@@ -35,6 +35,13 @@ export const PERMISSIONS = [
 
 export type Permission = (typeof PERMISSIONS)[number]["key"];
 
+// The one role name that's treated as the app's super-admin role: it
+// implicitly has every permission (see hasPermission() in ./index.ts)
+// regardless of what's stored in its Role.permissions row, and the Roles
+// module refuses to save an edit that would strip it of Manage Roles. Also
+// used by the Users module's last-admin delete guard.
+export const ADMIN_ROLE_NAME = "admin";
+
 export const PERMISSION_KEYS: Permission[] = PERMISSIONS.map((p) => p.key);
 
 const PERMISSION_KEY_SET: ReadonlySet<string> = new Set(PERMISSION_KEYS);
