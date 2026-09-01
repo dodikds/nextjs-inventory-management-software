@@ -63,3 +63,11 @@ export async function getExpenses({ q, page, perPage }: GetExpensesParams) {
 
   return { expenses, total, page: safePage };
 }
+
+export async function getWarehouseOptions() {
+  return dbPrisma.warehouse.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}
+
+export async function getExpenseCategoryOptions() {
+  return dbPrisma.expenseCategory.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
+}

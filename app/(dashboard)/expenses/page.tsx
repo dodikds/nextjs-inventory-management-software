@@ -6,6 +6,7 @@ import ExpenseSearch from "@/components/expenses/ExpenseSearch";
 import ExpensePagination from "@/components/expenses/ExpensePagination";
 import ExpenseTableSkeleton from "@/components/expenses/ExpenseTableSkeleton";
 import ExpenseRowActions from "@/components/expenses/ExpenseRowActions";
+import ExpenseFlashToast from "@/components/expenses/ExpenseFlashToast";
 import { getExpenses, parsePage, parsePerPage } from "./queries";
 import styles from "./expenses.module.css";
 
@@ -21,6 +22,8 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
 
   return (
     <>
+      <ExpenseFlashToast />
+
       <div className="gg-table-toolbar">
         <ExpenseSearch />
         <div className="gg-spacer" />

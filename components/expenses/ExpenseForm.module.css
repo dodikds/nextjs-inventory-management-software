@@ -1,0 +1,4 @@
+.exp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5) var(--sp-8); }
+.date-field { position: relative; }
+.date-field svg { position: absolute; right: 16px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--gray-500); pointer-events: none; }
+.date-field .gg-input { padding-right: 46px; }
