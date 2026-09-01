@@ -71,3 +71,7 @@ export async function getWarehouseOptions() {
 export async function getExpenseCategoryOptions() {
   return dbPrisma.expenseCategory.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
 }
+
+export async function getExpenseById(id: string) {
+  return dbPrisma.expense.findFirst({ where: { id, deletedAt: null } });
+}

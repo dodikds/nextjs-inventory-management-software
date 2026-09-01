@@ -151,3 +151,73 @@ export async function createExpense(_prevState: ExpenseFormState, formData: Form
   revalidatePath("/expenses");
   redirect("/expenses?flash=created");
 }
+
+// `id` is bound server-side via `updateExpense.bind(null, id)` in the edit
+// page (a Server Component, so `id` comes from the trusted URL route param)
+// rather than read from `formData` — a hidden `<input name="id">` would be
+// part of the rendered HTML and editable via devtools. The bound function's
+// signature `(prevState, formData) => ...` is exactly what useActionState
+// expects, so this composes with it directly.
+export async function updateExpense(
+  id: string,
+  _prevState: ExpenseFormState,
+  formData: FormData,
+): Promise<ExpenseFormState> {
+  const session = await auth();
+  if (!hasPermission(session, "manage_expenses")) {
+    return NO_PERMISSION_STATE;
+  }
+
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return { message: parsedId.error.issues[0].message };
+  }
+
+  const parsed = parseExpenseFormData(formData);
+  if (!parsed.success) {
+    return { errors: fieldErrorsFrom(parsed.error), message: "Please fix the errors below" };
+  }
+
+  const existing = await dbPrisma.expense.findFirst({ where: { id: parsedId.data, deletedAt: null } });
+  if (!existing) {
+    return { message: "Expense not found" };
+  }
+
+  const { date, title, warehouseId, expenseCategoryId, amount, details } = parsed.data;
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return { errors: { date: "Please choose a valid date" }, message: "Please fix the errors below" };
+  }
+
+  const [warehouse, category] = await Promise.all([
+    dbPrisma.warehouse.findFirst({ where: { id: warehouseId, deletedAt: null } }),
+    dbPrisma.expenseCategory.findFirst({ where: { id: expenseCategoryId, deletedAt: null } }),
+  ]);
+
+  const errors: ExpenseFieldErrors = {};
+  if (!warehouse) errors.warehouseId = "Please choose a valid warehouse";
+  if (!category) errors.expenseCategoryId = "Please choose a valid expense category";
+  if (Object.keys(errors).length > 0) {
+    return { errors, message: "Please fix the errors below" };
+  }
+
+  // `reference` is never touched here — it's assigned once at creation and
+  // stays fixed for the life of the expense, same as every other module's
+  // document number.
+  await dbPrisma.expense.update({
+    where: { id: parsedId.data },
+    data: {
+      date: parsedDate,
+      title,
+      warehouseId,
+      expenseCategoryId,
+      amount,
+      details: details || null,
+    },
+  });
+
+  revalidatePath("/expenses");
+  revalidatePath(`/expenses/${parsedId.data}/edit`);
+  redirect("/expenses?flash=updated");
+}
