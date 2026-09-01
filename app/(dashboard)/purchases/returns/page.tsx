@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { CornerUpLeft, Plus } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import PurchaseReturnSearch from "@/components/purchase-returns/PurchaseReturnSearch";
 import PurchaseReturnDateFilter from "@/components/purchase-returns/PurchaseReturnDateFilter";
@@ -22,6 +24,9 @@ export default async function PurchaseReturnsPage({ searchParams }: PurchaseRetu
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_purchase_returns");
+
   return (
     <>
       <div className="gg-table-toolbar">
@@ -29,14 +34,16 @@ export default async function PurchaseReturnsPage({ searchParams }: PurchaseRetu
         <div className="gg-spacer" />
         <PurchaseReturnFilterButton />
         <PurchaseReturnDateFilter />
-        <Link href="/purchases/returns/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Purchase Return
-        </Link>
+        {canManage && (
+          <Link href="/purchases/returns/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Purchase Return
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${date ?? ""}:${page}:${perPage}`} fallback={<PurchaseReturnTableSkeleton />}>
-          <PurchaseReturnTableSection q={q} date={date} page={page} perPage={perPage} />
+          <PurchaseReturnTableSection q={q} date={date} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -48,6 +55,7 @@ type PurchaseReturnTableSectionProps = {
   date?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
 const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
@@ -56,7 +64,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
   ORDERED: { label: "Ordered", variant: "gg-badge--info" },
 };
 
-async function PurchaseReturnTableSection({ q, date, page, perPage }: PurchaseReturnTableSectionProps) {
+async function PurchaseReturnTableSection({ q, date, page, perPage, canManage }: PurchaseReturnTableSectionProps) {
   const { purchaseReturns, total, page: safePage } = await getPurchaseReturns({ q, date, page, perPage });
 
   return (
@@ -122,7 +130,9 @@ async function PurchaseReturnTableSection({ q, date, page, perPage }: PurchaseRe
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <PurchaseReturnRowActions id={purchaseReturn.id} reference={purchaseReturn.reference} />
+                      {canManage && (
+                        <PurchaseReturnRowActions id={purchaseReturn.id} reference={purchaseReturn.reference} />
+                      )}
                     </td>
                   </tr>
                 );

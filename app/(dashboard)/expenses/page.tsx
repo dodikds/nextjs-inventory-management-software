@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Wallet } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import ExpenseSearch from "@/components/expenses/ExpenseSearch";
 import ExpensePagination from "@/components/expenses/ExpensePagination";
@@ -20,6 +22,9 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_expenses");
+
   return (
     <>
       <ExpenseFlashToast />
@@ -27,14 +32,16 @@ export default async function ExpensesPage({ searchParams }: ExpensesPageProps) 
       <div className="gg-table-toolbar">
         <ExpenseSearch />
         <div className="gg-spacer" />
-        <Link href="/expenses/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Expense
-        </Link>
+        {canManage && (
+          <Link href="/expenses/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Expense
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<ExpenseTableSkeleton />}>
-          <ExpenseTableSection q={q} page={page} perPage={perPage} />
+          <ExpenseTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -45,9 +52,10 @@ type ExpenseTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function ExpenseTableSection({ q, page, perPage }: ExpenseTableSectionProps) {
+async function ExpenseTableSection({ q, page, perPage, canManage }: ExpenseTableSectionProps) {
   const { expenses, total, page: safePage } = await getExpenses({ q, page, perPage });
 
   return (
@@ -98,7 +106,7 @@ async function ExpenseTableSection({ q, page, perPage }: ExpenseTableSectionProp
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <ExpenseRowActions id={expense.id} reference={expense.reference} />
+                      {canManage && <ExpenseRowActions id={expense.id} reference={expense.reference} />}
                     </td>
                   </tr>
                 );

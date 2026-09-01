@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { CornerUpRight } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import SaleReturnSearch from "@/components/sale-returns/SaleReturnSearch";
 import SaleReturnDateFilter from "@/components/sale-returns/SaleReturnDateFilter";
@@ -21,6 +23,9 @@ export default async function SaleReturnsPage({ searchParams }: SaleReturnsPageP
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_sale_returns");
+
   return (
     <>
       {/* No "Create" button here — design/Sales Returns.html's toolbar has
@@ -36,7 +41,7 @@ export default async function SaleReturnsPage({ searchParams }: SaleReturnsPageP
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${date ?? ""}:${page}:${perPage}`} fallback={<SaleReturnTableSkeleton />}>
-          <SaleReturnTableSection q={q} date={date} page={page} perPage={perPage} />
+          <SaleReturnTableSection q={q} date={date} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -48,6 +53,7 @@ type SaleReturnTableSectionProps = {
   date?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
 // design/Edit Sale Return.html's own Status <select> — Pending/Received/
@@ -69,7 +75,7 @@ const PAYMENT_STATUS_BADGE: Record<string, { label: string; variant: string }> =
   UNPAID: { label: "Unpaid", variant: "gg-badge--warning" },
 };
 
-async function SaleReturnTableSection({ q, date, page, perPage }: SaleReturnTableSectionProps) {
+async function SaleReturnTableSection({ q, date, page, perPage, canManage }: SaleReturnTableSectionProps) {
   const { saleReturns, total, page: safePage } = await getSaleReturns({ q, date, page, perPage });
 
   return (
@@ -130,7 +136,7 @@ async function SaleReturnTableSection({ q, date, page, perPage }: SaleReturnTabl
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <SaleReturnRowActions id={saleReturn.id} reference={saleReturn.reference} />
+                      {canManage && <SaleReturnRowActions id={saleReturn.id} reference={saleReturn.reference} />}
                     </td>
                   </tr>
                 );

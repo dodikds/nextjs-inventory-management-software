@@ -10,9 +10,13 @@ import { deleteAdjustment } from "@/app/(dashboard)/adjustments/actions";
 type AdjustmentRowActionsProps = {
   id: string;
   reference: string;
+  // Viewing an adjustment isn't permission-gated (its detail page has no
+  // hasPermission() check), so View always renders — only Delete is hidden
+  // without manage_adjustments (there's no Edit for this module at all).
+  canManage: boolean;
 };
 
-export default function AdjustmentRowActions({ id, reference }: AdjustmentRowActionsProps) {
+export default function AdjustmentRowActions({ id, reference, canManage }: AdjustmentRowActionsProps) {
   const router = useRouter();
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -49,9 +53,11 @@ export default function AdjustmentRowActions({ id, reference }: AdjustmentRowAct
         <Link href={`/adjustments/${id}`} className="act-btn act-view" title="View">
           <Eye />
         </Link>
-        <button className="act-btn act-del" type="button" title="Delete" onClick={() => setIsConfirmOpen(true)}>
-          <Trash2 />
-        </button>
+        {canManage && (
+          <button className="act-btn act-del" type="button" title="Delete" onClick={() => setIsConfirmOpen(true)}>
+            <Trash2 />
+          </button>
+        )}
       </div>
 
       <div

@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Repeat } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import TransferSearch from "@/components/transfers/TransferSearch";
 import TransferFilterButton from "@/components/transfers/TransferFilterButton";
@@ -21,6 +23,9 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_transfers");
+
   return (
     <>
       {/* No date field here — unlike Purchases/Purchase Returns/Sales/Sale
@@ -30,14 +35,16 @@ export default async function TransfersPage({ searchParams }: TransfersPageProps
         <TransferSearch />
         <div className="gg-spacer" />
         <TransferFilterButton />
-        <Link href="/transfers/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Transfer
-        </Link>
+        {canManage && (
+          <Link href="/transfers/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Transfer
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<TransferTableSkeleton />}>
-          <TransferTableSection q={q} page={page} perPage={perPage} />
+          <TransferTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -48,6 +55,7 @@ type TransferTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
 const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
@@ -56,7 +64,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
   COMPLETED: { label: "Completed", variant: "gg-badge--success" },
 };
 
-async function TransferTableSection({ q, page, perPage }: TransferTableSectionProps) {
+async function TransferTableSection({ q, page, perPage, canManage }: TransferTableSectionProps) {
   const { transfers, total, page: safePage } = await getTransfers({ q, page, perPage });
   const ids = transfers.map((transfer) => transfer.id);
 
@@ -117,7 +125,7 @@ async function TransferTableSection({ q, page, perPage }: TransferTableSectionPr
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <TransferRowActions id={transfer.id} reference={transfer.reference} />
+                      {canManage && <TransferRowActions id={transfer.id} reference={transfer.reference} />}
                     </td>
                   </tr>
                 );

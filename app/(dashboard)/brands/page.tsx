@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { Sparkles } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import BrandSearch from "@/components/brands/BrandSearch";
 import BrandPagination from "@/components/brands/BrandPagination";
 import BrandTableSkeleton from "@/components/brands/BrandTableSkeleton";
@@ -20,6 +22,9 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_brands");
+
   return (
     <BrandModalProvider>
       <BrandModal />
@@ -27,12 +32,12 @@ export default async function BrandsPage({ searchParams }: BrandsPageProps) {
       <div className="gg-table-toolbar">
         <BrandSearch />
         <div className="gg-spacer" />
-        <CreateBrandButton />
+        {canManage && <CreateBrandButton />}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<BrandTableSkeleton />}>
-          <BrandTableSection q={q} page={page} perPage={perPage} />
+          <BrandTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </BrandModalProvider>
@@ -43,9 +48,10 @@ type BrandTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function BrandTableSection({ q, page, perPage }: BrandTableSectionProps) {
+async function BrandTableSection({ q, page, perPage, canManage }: BrandTableSectionProps) {
   const { brands, total, page: safePage } = await getBrands({ q, page, perPage });
 
   return (
@@ -88,7 +94,7 @@ async function BrandTableSection({ q, page, perPage }: BrandTableSectionProps) {
                     </div>
                   </td>
                   <td>
-                    <BrandRowActions brand={{ id: brand.id, name: brand.name, logo: brand.logo }} />
+                    {canManage && <BrandRowActions brand={{ id: brand.id, name: brand.name, logo: brand.logo }} />}
                   </td>
                 </tr>
               ))

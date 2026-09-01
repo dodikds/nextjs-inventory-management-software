@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, SlidersHorizontal } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip } from "@/lib/format";
 import AdjustmentSearch from "@/components/adjustments/AdjustmentSearch";
 import AdjustmentPagination from "@/components/adjustments/AdjustmentPagination";
@@ -19,19 +21,24 @@ export default async function AdjustmentsPage({ searchParams }: AdjustmentsPageP
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_adjustments");
+
   return (
     <>
       <div className="gg-table-toolbar">
         <AdjustmentSearch />
         <div className="gg-spacer" />
-        <Link href="/adjustments/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Adjustment
-        </Link>
+        {canManage && (
+          <Link href="/adjustments/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Adjustment
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<AdjustmentTableSkeleton />}>
-          <AdjustmentTableSection q={q} page={page} perPage={perPage} />
+          <AdjustmentTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -42,9 +49,10 @@ type AdjustmentTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function AdjustmentTableSection({ q, page, perPage }: AdjustmentTableSectionProps) {
+async function AdjustmentTableSection({ q, page, perPage, canManage }: AdjustmentTableSectionProps) {
   const { adjustments, total, page: safePage } = await getAdjustments({ q, page, perPage });
 
   return (
@@ -85,7 +93,7 @@ async function AdjustmentTableSection({ q, page, perPage }: AdjustmentTableSecti
                     {adjustment._count.items} item{adjustment._count.items === 1 ? "" : "s"}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <AdjustmentRowActions id={adjustment.id} reference={adjustment.reference} />
+                    <AdjustmentRowActions id={adjustment.id} reference={adjustment.reference} canManage={canManage} />
                   </td>
                 </tr>
               ))

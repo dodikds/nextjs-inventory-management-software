@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Upload, Users, ChevronUp, ChevronDown } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip } from "@/lib/format";
 import SupplierSearch from "@/components/suppliers/SupplierSearch";
 import SupplierPagination from "@/components/suppliers/SupplierPagination";
@@ -30,6 +32,9 @@ export default async function SuppliersPage({ searchParams }: SuppliersPageProps
   const sort = parseSort(params.sort);
   const dir = parseDir(params.dir);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_suppliers");
+
   return (
     <>
       <SupplierFlashToast />
@@ -40,9 +45,11 @@ export default async function SuppliersPage({ searchParams }: SuppliersPageProps
         <button className="gg-btn gg-btn--secondary" type="button" disabled title="Not implemented yet">
           <Upload /> Import Suppliers
         </button>
-        <Link href="/peoples/suppliers/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Supplier
-        </Link>
+        {canManage && (
+          <Link href="/peoples/suppliers/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Supplier
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
@@ -50,7 +57,7 @@ export default async function SuppliersPage({ searchParams }: SuppliersPageProps
           key={`${q ?? ""}:${page}:${perPage}:${sort}:${dir}`}
           fallback={<SupplierTableSkeleton />}
         >
-          <SupplierTableSection q={q} page={page} perPage={perPage} sort={sort} dir={dir} />
+          <SupplierTableSection q={q} page={page} perPage={perPage} sort={sort} dir={dir} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -63,9 +70,10 @@ type SupplierTableSectionProps = {
   perPage: number;
   sort: SortField;
   dir: SortDir;
+  canManage: boolean;
 };
 
-async function SupplierTableSection({ q, page, perPage, sort, dir }: SupplierTableSectionProps) {
+async function SupplierTableSection({ q, page, perPage, sort, dir, canManage }: SupplierTableSectionProps) {
   const { suppliers, total, page: safePage } = await getSuppliers({ q, page, perPage, sort, dir });
 
   return (
@@ -117,7 +125,7 @@ async function SupplierTableSection({ q, page, perPage, sort, dir }: SupplierTab
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <SupplierRowActions id={supplier.id} name={supplier.name} />
+                      {canManage && <SupplierRowActions id={supplier.id} name={supplier.name} />}
                     </td>
                   </tr>
                 );

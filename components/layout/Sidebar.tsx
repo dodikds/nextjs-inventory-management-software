@@ -3,11 +3,38 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Search, ChevronRight } from "lucide-react";
-import { NAV } from "./nav-data";
+import { hasPermission } from "@/lib/permissions";
+import { NAV, type NavEntry } from "./nav-data";
+
+// Hides nav entries the signed-in user lacks permission for — UX only. The
+// real enforcement is each page/action's own server-side hasPermission()
+// check; a hidden link here is never what stops unauthorized access.
+function visibleNav(session: ReturnType<typeof useSession>["data"]): NavEntry[] {
+  const entries: NavEntry[] = [];
+  for (const entry of NAV) {
+    if (entry.type === "link") {
+      if (!entry.permission || hasPermission(session ?? null, entry.permission)) {
+        entries.push(entry);
+      }
+      continue;
+    }
+
+    const children = entry.children.filter(
+      (child) => !child.permission || hasPermission(session ?? null, child.permission),
+    );
+    if (children.length > 0) {
+      entries.push({ ...entry, children });
+    }
+  }
+  return entries;
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const nav = visibleNav(session);
 
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const initial = new Set<string>();
@@ -44,7 +71,7 @@ export default function Sidebar() {
         </div>
       </div>
       <nav className="gg-nav">
-        {NAV.map((entry) => {
+        {nav.map((entry) => {
           if (entry.type === "link") {
             const isActive = pathname === entry.href;
             const Icon = entry.icon;

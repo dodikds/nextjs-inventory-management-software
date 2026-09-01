@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { List } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import ExpenseCategorySearch from "@/components/expense-categories/ExpenseCategorySearch";
 import ExpenseCategoryPagination from "@/components/expense-categories/ExpenseCategoryPagination";
 import ExpenseCategoryTableSkeleton from "@/components/expense-categories/ExpenseCategoryTableSkeleton";
@@ -23,6 +25,9 @@ export default async function ExpenseCategoriesPage({ searchParams }: ExpenseCat
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_expense_categories");
+
   return (
     <MasterDataModalProvider>
       <MasterDataModal
@@ -35,12 +40,12 @@ export default async function ExpenseCategoriesPage({ searchParams }: ExpenseCat
       <div className="gg-table-toolbar">
         <ExpenseCategorySearch />
         <div className="gg-spacer" />
-        <MasterDataCreateButton entityLabel={ENTITY_LABEL} />
+        {canManage && <MasterDataCreateButton entityLabel={ENTITY_LABEL} />}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<ExpenseCategoryTableSkeleton />}>
-          <ExpenseCategoryTableSection q={q} page={page} perPage={perPage} />
+          <ExpenseCategoryTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </MasterDataModalProvider>
@@ -51,9 +56,10 @@ type ExpenseCategoryTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function ExpenseCategoryTableSection({ q, page, perPage }: ExpenseCategoryTableSectionProps) {
+async function ExpenseCategoryTableSection({ q, page, perPage, canManage }: ExpenseCategoryTableSectionProps) {
   const { categories, total, page: safePage } = await getExpenseCategories({ q, page, perPage });
 
   return (
@@ -86,11 +92,13 @@ async function ExpenseCategoryTableSection({ q, page, perPage }: ExpenseCategory
                     <span className="gg-td-strong">{category.name}</span>
                   </td>
                   <td>
-                    <MasterDataRowActions
-                      row={{ id: category.id, name: category.name }}
-                      entityLabel={ENTITY_LABEL}
-                      deleteAction={deleteExpenseCategory}
-                    />
+                    {canManage && (
+                      <MasterDataRowActions
+                        row={{ id: category.id, name: category.name }}
+                        entityLabel={ENTITY_LABEL}
+                        deleteAction={deleteExpenseCategory}
+                      />
+                    )}
                   </td>
                 </tr>
               ))

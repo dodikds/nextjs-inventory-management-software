@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { Layers } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import CategorySearch from "@/components/product-categories/CategorySearch";
 import CategoryPagination from "@/components/product-categories/CategoryPagination";
 import CategoryTableSkeleton from "@/components/product-categories/CategoryTableSkeleton";
@@ -23,6 +25,9 @@ export default async function ProductCategoriesPage({ searchParams }: ProductCat
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_product_categories");
+
   return (
     <MasterDataModalProvider>
       <MasterDataModal entityLabel={ENTITY_LABEL} createAction={createCategory} updateAction={updateCategory} />
@@ -30,12 +35,12 @@ export default async function ProductCategoriesPage({ searchParams }: ProductCat
       <div className="gg-table-toolbar">
         <CategorySearch />
         <div className="gg-spacer" />
-        <MasterDataCreateButton entityLabel={ENTITY_LABEL} />
+        {canManage && <MasterDataCreateButton entityLabel={ENTITY_LABEL} />}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<CategoryTableSkeleton />}>
-          <CategoryTableSection q={q} page={page} perPage={perPage} />
+          <CategoryTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </MasterDataModalProvider>
@@ -46,9 +51,10 @@ type CategoryTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function CategoryTableSection({ q, page, perPage }: CategoryTableSectionProps) {
+async function CategoryTableSection({ q, page, perPage, canManage }: CategoryTableSectionProps) {
   const { categories, total, page: safePage } = await getCategories({ q, page, perPage });
 
   return (
@@ -91,11 +97,13 @@ async function CategoryTableSection({ q, page, perPage }: CategoryTableSectionPr
                     </div>
                   </td>
                   <td>
-                    <MasterDataRowActions
-                      row={{ id: category.id, name: category.name, logo: category.logo }}
-                      entityLabel={ENTITY_LABEL}
-                      deleteAction={deleteCategory}
-                    />
+                    {canManage && (
+                      <MasterDataRowActions
+                        row={{ id: category.id, name: category.name, logo: category.logo }}
+                        entityLabel={ENTITY_LABEL}
+                        deleteAction={deleteCategory}
+                      />
+                    )}
                   </td>
                 </tr>
               ))

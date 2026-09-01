@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, ShieldCheck } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip } from "@/lib/format";
 import RoleSearch from "@/components/roles/RoleSearch";
 import RolePagination from "@/components/roles/RolePagination";
@@ -20,6 +22,9 @@ export default async function RolesPage({ searchParams }: RolesPageProps) {
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_roles");
+
   return (
     <>
       <RoleFlashToast />
@@ -27,14 +32,16 @@ export default async function RolesPage({ searchParams }: RolesPageProps) {
       <div className="gg-table-toolbar">
         <RoleSearch />
         <div className="gg-spacer" />
-        <Link href="/roles/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Role
-        </Link>
+        {canManage && (
+          <Link href="/roles/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Role
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<RoleTableSkeleton />}>
-          <RoleTableSection q={q} page={page} perPage={perPage} />
+          <RoleTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -45,9 +52,10 @@ type RoleTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function RoleTableSection({ q, page, perPage }: RoleTableSectionProps) {
+async function RoleTableSection({ q, page, perPage, canManage }: RoleTableSectionProps) {
   const { roles, total, page: safePage } = await getRoles({ q, page, perPage });
 
   return (
@@ -84,7 +92,7 @@ async function RoleTableSection({ q, page, perPage }: RoleTableSectionProps) {
                     </td>
                     <td className="gg-num">{date}</td>
                     <td style={{ textAlign: "right" }}>
-                      <RoleRowActions id={role.id} name={role.name} />
+                      {canManage && <RoleRowActions id={role.id} name={role.name} />}
                     </td>
                   </tr>
                 );

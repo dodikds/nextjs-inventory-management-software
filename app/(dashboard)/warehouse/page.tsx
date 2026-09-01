@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Plus, Warehouse as WarehouseIcon } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip } from "@/lib/format";
 import WarehouseSearch from "@/components/warehouse/WarehouseSearch";
 import WarehousePagination from "@/components/warehouse/WarehousePagination";
@@ -16,6 +18,9 @@ export default async function WarehousePage({ searchParams }: WarehousePageProps
   const q = params.q?.trim() || undefined;
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_warehouses");
+
   const { warehouses, total, page } = await getWarehouses({ q, page: parsePage(params.page), perPage });
 
   return (
@@ -23,9 +28,11 @@ export default async function WarehousePage({ searchParams }: WarehousePageProps
       <div className="gg-table-toolbar">
         <WarehouseSearch />
         <div className="gg-spacer" />
-        <Link href="/warehouse/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Warehouse
-        </Link>
+        {canManage && (
+          <Link href="/warehouse/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Warehouse
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
@@ -81,7 +88,7 @@ export default async function WarehousePage({ searchParams }: WarehousePageProps
                         </span>
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <WarehouseRowActions id={warehouse.id} name={warehouse.name} />
+                        {canManage && <WarehouseRowActions id={warehouse.id} name={warehouse.name} />}
                       </td>
                     </tr>
                   );

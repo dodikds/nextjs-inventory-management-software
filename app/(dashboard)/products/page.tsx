@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Boxes, Plus } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import ProductSearch from "@/components/products/ProductSearch";
 import ProductPagination from "@/components/products/ProductPagination";
@@ -21,6 +23,9 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_products");
+
   return (
     <>
       <ProductFlashToast />
@@ -31,14 +36,16 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         <ProductFilterButton />
         <ProductExportButton />
         <ProductImportButton />
-        <Link href="/products/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Product
-        </Link>
+        {canManage && (
+          <Link href="/products/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Product
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<ProductTableSkeleton />}>
-          <ProductTableSection q={q} page={page} perPage={perPage} />
+          <ProductTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -49,9 +56,10 @@ type ProductTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function ProductTableSection({ q, page, perPage }: ProductTableSectionProps) {
+async function ProductTableSection({ q, page, perPage, canManage }: ProductTableSectionProps) {
   const { products, total, page: safePage } = await getProducts({ q, page, perPage });
 
   return (
@@ -117,7 +125,7 @@ async function ProductTableSection({ q, page, perPage }: ProductTableSectionProp
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <ProductRowActions id={product.id} name={product.name} />
+                      <ProductRowActions id={product.id} name={product.name} canManage={canManage} />
                     </td>
                   </tr>
                 );

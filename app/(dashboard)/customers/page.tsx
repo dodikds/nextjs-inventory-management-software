@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Users } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip } from "@/lib/format";
 import CustomerSearch from "@/components/customers/CustomerSearch";
 import CustomerPagination from "@/components/customers/CustomerPagination";
@@ -21,6 +23,9 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_customers");
+
   return (
     <>
       <CustomerFlashToast />
@@ -29,14 +34,16 @@ export default async function CustomersPage({ searchParams }: CustomersPageProps
         <CustomerSearch />
         <div className="gg-spacer" />
         <CustomerImportButton />
-        <Link href="/customers/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Customer
-        </Link>
+        {canManage && (
+          <Link href="/customers/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Customer
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<CustomerTableSkeleton />}>
-          <CustomerTableSection q={q} page={page} perPage={perPage} />
+          <CustomerTableSection q={q} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -47,9 +54,10 @@ type CustomerTableSectionProps = {
   q?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
-async function CustomerTableSection({ q, page, perPage }: CustomerTableSectionProps) {
+async function CustomerTableSection({ q, page, perPage, canManage }: CustomerTableSectionProps) {
   const { customers, total, page: safePage } = await getCustomers({ q, page, perPage });
 
   return (
@@ -97,7 +105,9 @@ async function CustomerTableSection({ q, page, perPage }: CustomerTableSectionPr
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <CustomerRowActions id={customer.id} name={customer.name} isDefault={customer.isDefault} />
+                      {canManage && (
+                        <CustomerRowActions id={customer.id} name={customer.name} isDefault={customer.isDefault} />
+                      )}
                     </td>
                   </tr>
                 );

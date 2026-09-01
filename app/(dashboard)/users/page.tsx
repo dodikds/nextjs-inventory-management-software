@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Users } from "lucide-react";
 import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, getInitials } from "@/lib/format";
 import UserSearch from "@/components/users/UserSearch";
 import UserPagination from "@/components/users/UserPagination";
@@ -23,6 +24,7 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
 
   const session = await auth();
   const currentUserId = session?.user?.id;
+  const canManage = hasPermission(session, "manage_users");
 
   return (
     <>
@@ -31,14 +33,16 @@ export default async function UsersPage({ searchParams }: UsersPageProps) {
       <div className="gg-table-toolbar">
         <UserSearch />
         <div className="gg-spacer" />
-        <Link href="/users/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create User
-        </Link>
+        {canManage && (
+          <Link href="/users/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create User
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${page}:${perPage}`} fallback={<UserTableSkeleton />}>
-          <UserTableSection q={q} page={page} perPage={perPage} currentUserId={currentUserId} />
+          <UserTableSection q={q} page={page} perPage={perPage} currentUserId={currentUserId} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -50,9 +54,10 @@ type UserTableSectionProps = {
   page: number;
   perPage: number;
   currentUserId?: string;
+  canManage: boolean;
 };
 
-async function UserTableSection({ q, page, perPage, currentUserId }: UserTableSectionProps) {
+async function UserTableSection({ q, page, perPage, currentUserId, canManage }: UserTableSectionProps) {
   const { users, total, page: safePage } = await getUsers({ q, page, perPage });
 
   return (
@@ -107,11 +112,13 @@ async function UserTableSection({ q, page, perPage, currentUserId }: UserTableSe
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <UserRowActions
-                        id={user.id}
-                        name={`${user.firstName} ${user.lastName}`}
-                        isSelf={user.id === currentUserId}
-                      />
+                      {canManage && (
+                        <UserRowActions
+                          id={user.id}
+                          name={`${user.firstName} ${user.lastName}`}
+                          isSelf={user.id === currentUserId}
+                        />
+                      )}
                     </td>
                   </tr>
                 );

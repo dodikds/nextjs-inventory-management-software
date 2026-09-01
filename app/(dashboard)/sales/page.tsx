@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, ShoppingCart } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import SaleSearch from "@/components/sales/SaleSearch";
 import SaleDateFilter from "@/components/sales/SaleDateFilter";
@@ -22,6 +24,9 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_sales");
+
   return (
     <>
       <div className="gg-table-toolbar">
@@ -29,14 +34,16 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
         <div className="gg-spacer" />
         <SaleFilterButton />
         <SaleDateFilter />
-        <Link href="/sales/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Sale
-        </Link>
+        {canManage && (
+          <Link href="/sales/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Sale
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${date ?? ""}:${page}:${perPage}`} fallback={<SaleTableSkeleton />}>
-          <SaleTableSection q={q} date={date} page={page} perPage={perPage} />
+          <SaleTableSection q={q} date={date} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -48,6 +55,7 @@ type SaleTableSectionProps = {
   date?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
 const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
@@ -62,7 +70,7 @@ const PAYMENT_STATUS_BADGE: Record<string, { label: string; variant: string }> =
   UNPAID: { label: "Unpaid", variant: "gg-badge--danger" },
 };
 
-async function SaleTableSection({ q, date, page, perPage }: SaleTableSectionProps) {
+async function SaleTableSection({ q, date, page, perPage, canManage }: SaleTableSectionProps) {
   const { sales, total, grandTotalSum, paidSum, page: safePage } = await getSales({ q, date, page, perPage });
 
   return (
@@ -129,7 +137,7 @@ async function SaleTableSection({ q, date, page, perPage }: SaleTableSectionProp
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <SaleRowActions id={sale.id} reference={sale.reference} />
+                      {canManage && <SaleRowActions id={sale.id} reference={sale.reference} />}
                     </td>
                   </tr>
                 );

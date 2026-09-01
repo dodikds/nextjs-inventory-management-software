@@ -10,9 +10,13 @@ import { deleteProduct } from "@/app/(dashboard)/products/actions";
 type ProductRowActionsProps = {
   id: string;
   name: string;
+  // Viewing a product isn't permission-gated (its detail page has no
+  // hasPermission() check), so View always renders — only Edit/Delete are
+  // hidden without manage_products.
+  canManage: boolean;
 };
 
-export default function ProductRowActions({ id, name }: ProductRowActionsProps) {
+export default function ProductRowActions({ id, name, canManage }: ProductRowActionsProps) {
   const router = useRouter();
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -49,12 +53,16 @@ export default function ProductRowActions({ id, name }: ProductRowActionsProps) 
         <Link href={`/products/${id}`} className="act-btn act-view" title="View">
           <Eye />
         </Link>
-        <Link href={`/products/${id}/edit`} className="act-btn act-edit" title="Edit">
-          <Pencil />
-        </Link>
-        <button className="act-btn act-del" type="button" title="Delete" onClick={() => setIsConfirmOpen(true)}>
-          <Trash2 />
-        </button>
+        {canManage && (
+          <>
+            <Link href={`/products/${id}/edit`} className="act-btn act-edit" title="Edit">
+              <Pencil />
+            </Link>
+            <button className="act-btn act-del" type="button" title="Delete" onClick={() => setIsConfirmOpen(true)}>
+              <Trash2 />
+            </button>
+          </>
+        )}
       </div>
 
       <div

@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { Plus, Receipt } from "lucide-react";
+import { auth } from "@/auth";
+import { hasPermission } from "@/lib/permissions";
 import { formatDateTimeChip, formatMoney } from "@/lib/format";
 import PurchaseSearch from "@/components/purchases/PurchaseSearch";
 import PurchaseDateFilter from "@/components/purchases/PurchaseDateFilter";
@@ -22,6 +24,9 @@ export default async function PurchasesPage({ searchParams }: PurchasesPageProps
   const page = parsePage(params.page);
   const perPage = parsePerPage(params.perPage);
 
+  const session = await auth();
+  const canManage = hasPermission(session, "manage_purchases");
+
   return (
     <>
       <div className="gg-table-toolbar">
@@ -29,14 +34,16 @@ export default async function PurchasesPage({ searchParams }: PurchasesPageProps
         <div className="gg-spacer" />
         <PurchaseFilterButton />
         <PurchaseDateFilter />
-        <Link href="/purchases/create" className="gg-btn gg-btn--primary">
-          <Plus /> Create Purchase
-        </Link>
+        {canManage && (
+          <Link href="/purchases/create" className="gg-btn gg-btn--primary">
+            <Plus /> Create Purchase
+          </Link>
+        )}
       </div>
 
       <div className="gg-card gg-card-pad">
         <Suspense key={`${q ?? ""}:${date ?? ""}:${page}:${perPage}`} fallback={<PurchaseTableSkeleton />}>
-          <PurchaseTableSection q={q} date={date} page={page} perPage={perPage} />
+          <PurchaseTableSection q={q} date={date} page={page} perPage={perPage} canManage={canManage} />
         </Suspense>
       </div>
     </>
@@ -48,6 +55,7 @@ type PurchaseTableSectionProps = {
   date?: string;
   page: number;
   perPage: number;
+  canManage: boolean;
 };
 
 const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
@@ -56,7 +64,7 @@ const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
   ORDERED: { label: "Ordered", variant: "gg-badge--info" },
 };
 
-async function PurchaseTableSection({ q, date, page, perPage }: PurchaseTableSectionProps) {
+async function PurchaseTableSection({ q, date, page, perPage, canManage }: PurchaseTableSectionProps) {
   const { purchases, total, grandTotalSum, page: safePage } = await getPurchases({ q, date, page, perPage });
 
   return (
@@ -118,7 +126,7 @@ async function PurchaseTableSection({ q, date, page, perPage }: PurchaseTableSec
                       </span>
                     </td>
                     <td style={{ textAlign: "right" }}>
-                      <PurchaseRowActions id={purchase.id} reference={purchase.reference} />
+                      {canManage && <PurchaseRowActions id={purchase.id} reference={purchase.reference} />}
                     </td>
                   </tr>
                 );
