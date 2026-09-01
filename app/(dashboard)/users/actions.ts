@@ -122,7 +122,7 @@ export async function createUser(_prevState: UserFormState, formData: FormData):
   let created;
   try {
     created = await dbPrisma.user.create({
-      data: { firstName, lastName, email, phoneNumber, role, password: hashedPassword },
+      data: { firstName, lastName, email, phoneNumber, role, roleId: roleExists.id, password: hashedPassword },
     });
   } catch (error) {
     if (isDuplicateEmailError(error)) {
@@ -182,7 +182,14 @@ export async function updateUser(id: string, _prevState: UserFormState, formData
     return { message: "Please upload a JPG, PNG, WEBP, or GIF image" };
   }
 
-  const data: Prisma.UserUpdateInput = { firstName, lastName, email, phoneNumber, role };
+  const data: Prisma.UserUpdateInput = {
+    firstName,
+    lastName,
+    email,
+    phoneNumber,
+    role,
+    roleRef: { connect: { id: roleExists.id } },
+  };
 
   // A blank password field means "keep the existing password" — the
   // existing hash is never read, re-displayed, or touched unless the admin

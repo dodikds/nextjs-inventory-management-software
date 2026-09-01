@@ -1,8 +1,10 @@
 import bcrypt from "bcryptjs";
 import { dbPrisma } from "../lib/db";
+import { PERMISSION_KEYS } from "../lib/permissions/constants";
 
 async function seedAdminUser() {
   const hashedPassword = await bcrypt.hash("12345678", 10);
+  const adminRole = await dbPrisma.role.findUniqueOrThrow({ where: { name: "admin" } });
 
   const admin = await dbPrisma.user.upsert({
     where: { email: "dodikds@gmail.com" },
@@ -11,6 +13,7 @@ async function seedAdminUser() {
       lastName: "Dwi Sancoko",
       password: hashedPassword,
       role: "admin",
+      roleId: adminRole.id,
     },
     create: {
       firstName: "Dodik",
@@ -20,6 +23,7 @@ async function seedAdminUser() {
       phoneNumber: null,
       image: null,
       role: "admin",
+      roleId: adminRole.id,
     },
   });
 
@@ -119,14 +123,24 @@ async function seedDefaultCustomer() {
   console.log(`Seeded default customer: ${customer.name}`);
 }
 
-// Seeds the fixed set of role names the Users create/edit form's Role
+// Seeds the fixed set of starter roles the Users create/edit form's Role
 // dropdown reads from (see app/(dashboard)/users/queries.ts::getRoles).
-// "admin" must exist since seedAdminUser() assigns it above.
-const ROLE_SEED_DATA = ["admin", "manager", "cashier"] as const;
+// "admin" must exist (and keep every permission) since seedAdminUser()
+// assigns it above; manager/cashier start with no permissions and are
+// configured later through the Roles/Permissions module.
+const ROLE_SEED_DATA = [
+  { name: "admin", permissions: PERMISSION_KEYS },
+  { name: "manager", permissions: [] as string[] },
+  { name: "cashier", permissions: [] as string[] },
+];
 
 async function seedRoles() {
-  for (const name of ROLE_SEED_DATA) {
-    await dbPrisma.role.upsert({ where: { name }, update: {}, create: { name } });
+  for (const { name, permissions } of ROLE_SEED_DATA) {
+    await dbPrisma.role.upsert({
+      where: { name },
+      update: name === "admin" ? { permissions } : {},
+      create: { name, permissions },
+    });
   }
 
   console.log(`Seeded ${ROLE_SEED_DATA.length} roles`);
@@ -145,8 +159,8 @@ async function seedUnits() {
 }
 
 async function main() {
-  await seedAdminUser();
   await seedRoles();
+  await seedAdminUser();
   await seedUnits();
   await seedSuppliers();
   await seedDefaultCustomer();
