@@ -35,7 +35,7 @@ export type BrandActionResult =
 
 const NO_PERMISSION_RESULT: BrandActionResult = {
   success: false,
-  message: "You don't have permission to manage products",
+  message: "You don't have permission to manage brands",
 };
 
 function fieldErrorsFrom(error: z.ZodError): BrandFieldErrors {
@@ -62,7 +62,7 @@ async function saveLogo(brandId: string, file: File): Promise<string> {
 
 export async function createBrand(formData: FormData): Promise<BrandActionResult> {
   const session = await auth();
-  if (!hasPermission(session, "manage_products")) {
+  if (!hasPermission(session, "manage_brands")) {
     return NO_PERMISSION_RESULT;
   }
 
@@ -98,7 +98,7 @@ export async function createBrand(formData: FormData): Promise<BrandActionResult
 // record before writing anything.
 export async function updateBrand(id: string, formData: FormData): Promise<BrandActionResult> {
   const session = await auth();
-  if (!hasPermission(session, "manage_products")) {
+  if (!hasPermission(session, "manage_brands")) {
     return NO_PERMISSION_RESULT;
   }
 
@@ -145,8 +145,8 @@ export type DeleteBrandResult = { success: true } | { success: false; error: str
 // real or current: it re-fetches and validates it itself before acting.
 export async function deleteBrand(id: string): Promise<DeleteBrandResult> {
   const session = await auth();
-  if (!hasPermission(session, "manage_products")) {
-    return { success: false, error: "You don't have permission to manage products" };
+  if (!hasPermission(session, "manage_brands")) {
+    return { success: false, error: "You don't have permission to manage brands" };
   }
 
   const parsedId = idSchema.safeParse(id);

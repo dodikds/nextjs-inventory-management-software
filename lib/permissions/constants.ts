@@ -42,3 +42,13 @@ const PERMISSION_KEY_SET: ReadonlySet<string> = new Set(PERMISSION_KEYS);
 export function isPermission(value: string): value is Permission {
   return PERMISSION_KEY_SET.has(value);
 }
+
+// Narrows a Prisma Json column (Role.permissions) back down to the
+// canonical Permission[] shape, dropping anything that no longer matches
+// the current permission list (e.g. a permission removed in a later
+// release) rather than trusting it blindly. Shared by the session callback
+// in auth.ts and the Role edit page.
+export function toPermissions(value: unknown): Permission[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is Permission => typeof entry === "string" && isPermission(entry));
+}

@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/auth";
-import { hasPermission } from "@/lib/permissions";
-import { isPermission, type Permission } from "@/lib/permissions/constants";
+import { hasPermission, toPermissions } from "@/lib/permissions";
 import RoleForm from "@/components/roles/RoleForm";
 import { getRoleById } from "../../queries";
 import { updateRole } from "../../actions";
@@ -11,15 +10,6 @@ import { updateRole } from "../../actions";
 type EditRolePageProps = {
   params: Promise<{ id: string }>;
 };
-
-// Role.permissions is a Prisma Json column — narrow it back down to the
-// canonical Permission[] shape (dropping anything that no longer matches
-// the current permission list, e.g. a permission removed in a later
-// release) rather than trusting it blindly.
-function toPermissions(value: unknown): Permission[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is Permission => typeof entry === "string" && isPermission(entry));
-}
 
 export default async function EditRolePage({ params }: EditRolePageProps) {
   const session = await auth();
