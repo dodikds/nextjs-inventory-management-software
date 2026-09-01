@@ -50,3 +50,7 @@ export async function getRoles({ q, page, perPage }: GetRolesParams) {
 
   return { roles, total, page: safePage };
 }
+
+export async function getRoleById(id: string) {
+  return dbPrisma.role.findFirst({ where: { id, deletedAt: null } });
+}

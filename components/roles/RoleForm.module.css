@@ -1,0 +1,33 @@
+/* Field validation states — deliberately not in gildedglow.css, since the
+   design system doesn't define an error state for .gg-input/.gg-select. */
+.is-error {
+  border-color: var(--danger) !important;
+}
+.is-error:focus {
+  box-shadow: 0 0 0 3px rgba(213, 64, 47, 0.25) !important;
+}
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--danger-fg);
+}
+.field-error svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* Permission checkbox grid — matches design/Create Role.html's own <style>
+   block, which isn't in the shared gildedglow.css since Roles is the first
+   module to need it. */
+.gg-check { width: 20px; height: 20px; border: 1.5px solid var(--gray-300); border-radius: var(--r-xs); background: #fff; cursor: pointer; appearance: none; -webkit-appearance: none; position: relative; flex: none; transition: border-color .15s, background .15s; }
+.gg-check:checked { background: var(--gold-600); border-color: var(--gold-600); }
+.gg-check:checked::after { content: ""; position: absolute; left: 6px; top: 2px; width: 4px; height: 9px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.perm-head { display: flex; align-items: center; gap: var(--sp-4); margin: var(--sp-7) 0 var(--sp-5); }
+.perm-head .lbl { font-family: var(--font-display); font-weight: 600; color: var(--ink); font-size: 15px; }
+.perm-all { display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; }
+.perm-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-5) var(--sp-8); }
+.perm-item { display: flex; align-items: center; gap: var(--sp-3); cursor: pointer; color: var(--gray-700); font-size: 14px; }
+.perm-item:hover { color: var(--ink); }
