@@ -104,7 +104,7 @@ export async function createUser(_prevState: UserFormState, formData: FormData):
   // getRoles() in ./queries.ts), but the submitted value still arrives as a
   // plain form string — re-validated against the table here so a tampered
   // request can't set a role that was never actually offered.
-  const roleExists = await dbPrisma.role.findUnique({ where: { name: role } });
+  const roleExists = await dbPrisma.role.findFirst({ where: { name: role, deletedAt: null } });
   if (!roleExists) {
     return { errors: { role: "Please choose a valid role" }, message: "Please fix the errors below" };
   }
@@ -164,7 +164,7 @@ export async function updateUser(id: string, _prevState: UserFormState, formData
 
   const { firstName, lastName, email, phoneNumber, role, password } = parsed.data;
 
-  const roleExists = await dbPrisma.role.findUnique({ where: { name: role } });
+  const roleExists = await dbPrisma.role.findFirst({ where: { name: role, deletedAt: null } });
   if (!roleExists) {
     return { errors: { role: "Please choose a valid role" }, message: "Please fix the errors below" };
   }

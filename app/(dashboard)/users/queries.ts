@@ -65,5 +65,5 @@ export async function getUserById(id: string) {
 }
 
 export async function getRoles() {
-  return dbPrisma.role.findMany({ orderBy: { name: "asc" } });
+  return dbPrisma.role.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } });
 }
