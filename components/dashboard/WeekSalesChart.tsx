@@ -3,25 +3,21 @@
 import { Line } from "react-chartjs-2";
 import { CHART_COLORS } from "./chartTheme";
 
-const DATES = [
-  "2026-05-20",
-  "2026-05-21",
-  "2026-05-22",
-  "2026-05-23",
-  "2026-05-24",
-  "2026-05-25",
-  "2026-05-26",
-];
+type WeekSalesChartProps = {
+  labels: string[];
+  sales: number[];
+  purchases: number[];
+};
 
-export default function WeekSalesChart() {
+export default function WeekSalesChart({ labels, sales, purchases }: WeekSalesChartProps) {
   return (
     <Line
       data={{
-        labels: DATES,
+        labels,
         datasets: [
           {
             label: "Sales",
-            data: [0, 0, 0, 0, 0, 0, 0],
+            data: sales,
             borderColor: CHART_COLORS.gold,
             backgroundColor: "rgba(192,133,26,.12)",
             tension: 0.35,
@@ -32,7 +28,7 @@ export default function WeekSalesChart() {
           },
           {
             label: "Purchases",
-            data: [0, 0, 0, 0, 0, 0, 0],
+            data: purchases,
             borderColor: CHART_COLORS.emerald,
             backgroundColor: "rgba(16,156,107,.10)",
             tension: 0.35,
@@ -56,8 +52,7 @@ export default function WeekSalesChart() {
         scales: {
           y: {
             beginAtZero: true,
-            suggestedMax: 1,
-            ticks: { callback: (v) => "$ " + v, stepSize: 0.1 },
+            ticks: { callback: (v) => "$ " + v },
             title: { display: true, text: "Amount", font: { weight: 600 } },
             grid: { color: CHART_COLORS.gray100 },
           },

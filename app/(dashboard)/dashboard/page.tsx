@@ -11,18 +11,9 @@ import {
 import WeekSalesChart from "@/components/dashboard/WeekSalesChart";
 import TopProductsChart from "@/components/dashboard/TopProductsChart";
 import TopCustomersChart from "@/components/dashboard/TopCustomersChart";
+import { formatMoney } from "@/lib/format";
+import { getDashboardKpis, getWeekSalesAndPurchases } from "./queries";
 import styles from "./dashboard.module.css";
-
-const KPIS = [
-  { tone: "gold", icon: ShoppingCart, value: "$ 0.00", label: "Sales" },
-  { tone: "emerald", icon: ShoppingBag, value: "$ 0.00", label: "Purchases" },
-  { tone: "blue", icon: ArrowRight, value: "$ 0.00", label: "Sales Returns" },
-  { tone: "orange", icon: ArrowLeft, value: "$ 0.00", label: "Purchases Returns" },
-  { tone: "violet", icon: DollarSign, value: "$ 0.00", label: "Today Total Sales" },
-  { tone: "rose", icon: Banknote, value: "$ 0.00", label: "Today Total Received (Sales)" },
-  { tone: "cyan", icon: ShoppingCart, value: "$ 0.00", label: "Today Total Purchases" },
-  { tone: "red", icon: CircleMinus, value: "$ 0.00", label: "Today Total Expense" },
-] as const;
 
 const RECENT_SALES = [
   { ref: "SA_11149", customer: "direct-customer", total: "71,800.00", paid: "71,800.00", due: "0.00" },
@@ -37,7 +28,20 @@ const STOCK_ALERTS = [
   { code: "001", product: "FACE FAT AND DOUBLE CHIN", warehouse: "Office", qty: "2" },
 ] as const;
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const kpis = await getDashboardKpis();
+
+  const KPIS = [
+    { tone: "gold", icon: ShoppingCart, value: kpis.sales, label: "Sales" },
+    { tone: "emerald", icon: ShoppingBag, value: kpis.purchases, label: "Purchases" },
+    { tone: "blue", icon: ArrowRight, value: kpis.salesReturns, label: "Sales Returns" },
+    { tone: "orange", icon: ArrowLeft, value: kpis.purchasesReturns, label: "Purchases Returns" },
+    { tone: "violet", icon: DollarSign, value: kpis.todayTotalSales, label: "Today Total Sales" },
+    { tone: "rose", icon: Banknote, value: kpis.todayTotalReceivedSales, label: "Today Total Received (Sales)" },
+    { tone: "cyan", icon: ShoppingCart, value: kpis.todayTotalPurchases, label: "Today Total Purchases" },
+    { tone: "red", icon: CircleMinus, value: kpis.todayTotalExpense, label: "Today Total Expense" },
+  ] as const;
+
   return (
     <div className={styles["dash-section-gap"]}>
       <div className="gg-kpi-grid">
@@ -47,7 +51,7 @@ export default function DashboardPage() {
               <kpi.icon />
             </div>
             <div className="gg-kpi-body">
-              <span className="gg-kpi-value gg-num">{kpi.value}</span>
+              <span className="gg-kpi-value gg-num">$ {formatMoney(kpi.value)}</span>
               <span className="gg-kpi-label">{kpi.label}</span>
             </div>
           </div>
