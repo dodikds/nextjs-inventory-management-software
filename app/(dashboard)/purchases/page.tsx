@@ -11,6 +11,7 @@ import PurchasePagination from "@/components/purchases/PurchasePagination";
 import PurchaseTableSkeleton from "@/components/purchases/PurchaseTableSkeleton";
 import PurchaseRowActions from "@/components/purchases/PurchaseRowActions";
 import { getPurchases, parsePage, parsePerPage } from "./queries";
+import { STATUS_BADGE } from "./badges";
 import styles from "./purchases.module.css";
 
 type PurchasesPageProps = {
@@ -56,12 +57,6 @@ type PurchaseTableSectionProps = {
   page: number;
   perPage: number;
   canManage: boolean;
-};
-
-const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
-  RECEIVED: { label: "Received", variant: "gg-badge--success" },
-  PENDING: { label: "Pending", variant: "gg-badge--warning" },
-  ORDERED: { label: "Ordered", variant: "gg-badge--info" },
 };
 
 async function PurchaseTableSection({ q, date, page, perPage, canManage }: PurchaseTableSectionProps) {
