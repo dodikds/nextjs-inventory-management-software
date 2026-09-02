@@ -17,6 +17,7 @@ import {
   getWeekSalesAndPurchases,
   getTopSellingProductsThisYear,
   getTopSellingProductsThisMonth,
+  getTopCustomersThisMonth,
 } from "./queries";
 import styles from "./dashboard.module.css";
 
@@ -34,11 +35,12 @@ const STOCK_ALERTS = [
 ] as const;
 
 export default async function DashboardPage() {
-  const [kpis, weekData, topProductsYear, topProductsMonth] = await Promise.all([
+  const [kpis, weekData, topProductsYear, topProductsMonth, topCustomers] = await Promise.all([
     getDashboardKpis(),
     getWeekSalesAndPurchases(),
     getTopSellingProductsThisYear(),
     getTopSellingProductsThisMonth(),
+    getTopCustomersThisMonth(),
   ]);
 
   const KPIS = [
@@ -138,11 +140,14 @@ export default async function DashboardPage() {
 
           <div className="gg-card">
             <div className="gg-card-head">
-              <span className="gg-card-title">Top 5 Customers (May)</span>
+              <span className="gg-card-title">Top 5 Customers ({topCustomers.label})</span>
             </div>
             <div className="gg-card-pad">
               <div className={styles["chart-box"]} style={{ height: 300 }}>
-                <TopCustomersChart />
+                <TopCustomersChart
+                  labels={topCustomers.customers.map((c) => c.name)}
+                  values={topCustomers.customers.map((c) => c.grandTotal)}
+                />
               </div>
             </div>
           </div>

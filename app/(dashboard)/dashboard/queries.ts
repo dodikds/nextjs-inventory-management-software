@@ -14,6 +14,15 @@ function todayRange(): { gte: Date; lt: Date } {
   return dayRange(0);
 }
 
+// Current UTC calendar month, plus its display label (e.g. "September") —
+// shared by every "this month" widget so they all agree on the window.
+function currentMonthRange(): { gte: Date; lt: Date; label: string } {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return { gte: start, lt: end, label: start.toLocaleString("en-US", { month: "long", timeZone: "UTC" }) };
+}
+
 function formatDateKey(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -184,10 +193,49 @@ export async function getTopSellingProductsThisYear(limit = 5): Promise<TopSelli
 }
 
 export async function getTopSellingProductsThisMonth(limit = 5): Promise<TopSellingProductsResult> {
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  const products = await getTopSellingProducts({ gte: start, lt: end }, limit);
-  const label = start.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  const { gte, lt, label } = currentMonthRange();
+  const products = await getTopSellingProducts({ gte, lt }, limit);
   return { label, products };
+}
+
+export type TopCustomer = {
+  customerId: string;
+  name: string;
+  grandTotal: number;
+};
+
+export type TopCustomersResult = {
+  label: string;
+  customers: TopCustomer[];
+};
+
+// Ranked by revenue like getTopSellingProducts above, over the same
+// "this month" window as the Top Selling Products table, so both widgets
+// in this row of the dashboard describe the same period.
+export async function getTopCustomersThisMonth(limit = 5): Promise<TopCustomersResult> {
+  const { gte, lt, label } = currentMonthRange();
+
+  const grouped = await dbPrisma.sale.groupBy({
+    by: ["customerId"],
+    where: { deletedAt: null, status: "RECEIVED", date: { gte, lt } },
+    _sum: { grandTotal: true },
+    orderBy: { _sum: { grandTotal: "desc" } },
+    take: limit,
+  });
+  if (grouped.length === 0) return { label, customers: [] };
+
+  const customers = await dbPrisma.customer.findMany({
+    where: { id: { in: grouped.map((g) => g.customerId) } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(customers.map((c) => [c.id, c.name]));
+
+  return {
+    label,
+    customers: grouped.map((g) => ({
+      customerId: g.customerId,
+      name: nameById.get(g.customerId) ?? "Unknown",
+      grandTotal: Number(g._sum.grandTotal ?? 0),
+    })),
+  };
 }
