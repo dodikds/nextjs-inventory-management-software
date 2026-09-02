@@ -28,11 +28,17 @@ function parseDateFilter(value: string | undefined): Date | null {
 type GetSalesParams = {
   q?: string;
   date?: string;
+  // Optional — undefined/omitted means every warehouse (Sales list page
+  // never passes this; Warehouse Reports does, see
+  // ../reports/warehouse/page.tsx). Reusing this function rather than a
+  // second copy is what keeps that report's numbers unable to disagree
+  // with this list.
+  warehouseId?: string;
   page: number;
   perPage: number;
 };
 
-export async function getSales({ q, date, page, perPage }: GetSalesParams) {
+export async function getSales({ q, date, warehouseId, page, perPage }: GetSalesParams) {
   const dateStart = parseDateFilter(date);
   const dateRange = dateStart
     ? { gte: dateStart, lt: new Date(dateStart.getTime() + 24 * 60 * 60 * 1000) }
@@ -41,6 +47,7 @@ export async function getSales({ q, date, page, perPage }: GetSalesParams) {
   const where: Prisma.SaleWhereInput = {
     deletedAt: null,
     ...(dateRange ? { date: dateRange } : {}),
+    ...(warehouseId ? { warehouseId } : {}),
     ...(q
       ? {
           OR: [

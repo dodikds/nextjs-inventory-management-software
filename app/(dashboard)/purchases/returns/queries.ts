@@ -28,11 +28,14 @@ function parseDateFilter(value: string | undefined): Date | null {
 type GetPurchaseReturnsParams = {
   q?: string;
   date?: string;
+  // Optional — see ../../sales/queries.ts's getSales for why (reused as-is
+  // by Warehouse Reports' Purchases Returns sub-tab).
+  warehouseId?: string;
   page: number;
   perPage: number;
 };
 
-export async function getPurchaseReturns({ q, date, page, perPage }: GetPurchaseReturnsParams) {
+export async function getPurchaseReturns({ q, date, warehouseId, page, perPage }: GetPurchaseReturnsParams) {
   const dateStart = parseDateFilter(date);
   const dateRange = dateStart
     ? { gte: dateStart, lt: new Date(dateStart.getTime() + 24 * 60 * 60 * 1000) }
@@ -41,6 +44,7 @@ export async function getPurchaseReturns({ q, date, page, perPage }: GetPurchase
   const where: Prisma.PurchaseReturnWhereInput = {
     deletedAt: null,
     ...(dateRange ? { date: dateRange } : {}),
+    ...(warehouseId ? { warehouseId } : {}),
     ...(q
       ? {
           OR: [

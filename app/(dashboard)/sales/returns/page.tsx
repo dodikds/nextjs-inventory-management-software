@@ -10,6 +10,7 @@ import SaleReturnPagination from "@/components/sale-returns/SaleReturnPagination
 import SaleReturnTableSkeleton from "@/components/sale-returns/SaleReturnTableSkeleton";
 import SaleReturnRowActions from "@/components/sale-returns/SaleReturnRowActions";
 import { getSaleReturns, parsePage, parsePerPage } from "./queries";
+import { STATUS_BADGE, PAYMENT_STATUS_BADGE } from "./badges";
 import styles from "./sale-returns.module.css";
 
 type SaleReturnsPageProps = {
@@ -54,25 +55,6 @@ type SaleReturnTableSectionProps = {
   page: number;
   perPage: number;
   canManage: boolean;
-};
-
-// design/Edit Sale Return.html's own Status <select> — Pending/Received/
-// Completed, a different workflow from StockStatus (see the SaleReturn
-// model's schema comment). Colors chosen as a sensible progression since
-// the design's list mock never fills these in (just "—" placeholders).
-const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
-  PENDING: { label: "Pending", variant: "gg-badge--warning" },
-  RECEIVED: { label: "Received", variant: "gg-badge--info" },
-  COMPLETED: { label: "Completed", variant: "gg-badge--success" },
-};
-
-// design/Sales Returns.html's own mock explicitly renders "Unpaid" with
-// gg-badge--warning (not --danger, unlike Sales' own list, which never
-// showed an explicit Unpaid example to match against).
-const PAYMENT_STATUS_BADGE: Record<string, { label: string; variant: string }> = {
-  PAID: { label: "Paid", variant: "gg-badge--success" },
-  PARTIAL: { label: "Partial", variant: "gg-badge--info" },
-  UNPAID: { label: "Unpaid", variant: "gg-badge--warning" },
 };
 
 async function SaleReturnTableSection({ q, date, page, perPage, canManage }: SaleReturnTableSectionProps) {

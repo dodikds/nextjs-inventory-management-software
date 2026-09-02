@@ -18,13 +18,17 @@ export function parsePage(value: string | undefined): number {
 
 type GetExpensesParams = {
   q?: string;
+  // Optional — see ../sales/queries.ts's getSales for why (reused as-is by
+  // Warehouse Reports' Expenses sub-tab).
+  warehouseId?: string;
   page: number;
   perPage: number;
 };
 
-export async function getExpenses({ q, page, perPage }: GetExpensesParams) {
+export async function getExpenses({ q, warehouseId, page, perPage }: GetExpensesParams) {
   const where: Prisma.ExpenseWhereInput = {
     deletedAt: null,
+    ...(warehouseId ? { warehouseId } : {}),
     ...(q
       ? {
           OR: [

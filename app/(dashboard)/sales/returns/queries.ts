@@ -28,11 +28,14 @@ function parseDateFilter(value: string | undefined): Date | null {
 type GetSaleReturnsParams = {
   q?: string;
   date?: string;
+  // Optional — see ../../sales/queries.ts's getSales for why (reused as-is
+  // by Warehouse Reports' Sales Returns sub-tab).
+  warehouseId?: string;
   page: number;
   perPage: number;
 };
 
-export async function getSaleReturns({ q, date, page, perPage }: GetSaleReturnsParams) {
+export async function getSaleReturns({ q, date, warehouseId, page, perPage }: GetSaleReturnsParams) {
   const dateStart = parseDateFilter(date);
   const dateRange = dateStart
     ? { gte: dateStart, lt: new Date(dateStart.getTime() + 24 * 60 * 60 * 1000) }
@@ -41,6 +44,7 @@ export async function getSaleReturns({ q, date, page, perPage }: GetSaleReturnsP
   const where: Prisma.SaleReturnWhereInput = {
     deletedAt: null,
     ...(dateRange ? { date: dateRange } : {}),
+    ...(warehouseId ? { warehouseId } : {}),
     ...(q
       ? {
           OR: [
