@@ -19,24 +19,22 @@ import {
   getTopSellingProductsThisMonth,
   getTopCustomersThisMonth,
   getRecentSales,
+  getStockAlerts,
 } from "./queries";
 import { STATUS_BADGE, PAYMENT_STATUS_BADGE } from "../sales/badges";
 import styles from "./dashboard.module.css";
 
-const STOCK_ALERTS = [
-  { code: "002", product: "ipl laser hair removal", warehouse: "Office", qty: "0" },
-  { code: "001", product: "FACE FAT AND DOUBLE CHIN", warehouse: "Office", qty: "2" },
-] as const;
-
 export default async function DashboardPage() {
-  const [kpis, weekData, topProductsYear, topProductsMonth, topCustomers, recentSales] = await Promise.all([
-    getDashboardKpis(),
-    getWeekSalesAndPurchases(),
-    getTopSellingProductsThisYear(),
-    getTopSellingProductsThisMonth(),
-    getTopCustomersThisMonth(),
-    getRecentSales(),
-  ]);
+  const [kpis, weekData, topProductsYear, topProductsMonth, topCustomers, recentSales, stockAlerts] =
+    await Promise.all([
+      getDashboardKpis(),
+      getWeekSalesAndPurchases(),
+      getTopSellingProductsThisYear(),
+      getTopSellingProductsThisMonth(),
+      getTopCustomersThisMonth(),
+      getRecentSales(),
+      getStockAlerts(),
+    ]);
 
   const KPIS = [
     { tone: "gold", icon: ShoppingCart, value: kpis.sales, label: "Sales" },
@@ -215,23 +213,27 @@ export default async function DashboardPage() {
                   <th style={{ textAlign: "right" }}>Alert Quantity</th>
                 </tr>
               </thead>
-              <tbody>
-                {STOCK_ALERTS.map((item) => (
-                  <tr key={item.code}>
-                    <td className="gg-num">{item.code}</td>
-                    <td className="gg-td-strong">{item.product}</td>
-                    <td>{item.warehouse}</td>
-                    <td>
-                      <span className={`${styles["qty-pill"]} gg-num`}>{item.qty}</span>{" "}
-                      <span className="gg-chip-unit">piece</span>
-                    </td>
-                    <td style={{ textAlign: "right" }}>
-                      <span className={`${styles["alert-pill"]} gg-num`}>3</span>{" "}
-                      <span className="gg-chip-unit">piece</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              {stockAlerts.length === 0 ? (
+                <tbody className={styles["empty-table-body"]} />
+              ) : (
+                <tbody>
+                  {stockAlerts.map((item) => (
+                    <tr key={`${item.productId}:${item.warehouseId}`}>
+                      <td className="gg-num">{item.code}</td>
+                      <td className="gg-td-strong">{item.productName}</td>
+                      <td>{item.warehouseName}</td>
+                      <td>
+                        <span className={`${styles["qty-pill"]} gg-num`}>{item.quantity}</span>{" "}
+                        <span className="gg-chip-unit">{item.unit}</span>
+                      </td>
+                      <td style={{ textAlign: "right" }}>
+                        <span className={`${styles["alert-pill"]} gg-num`}>{item.alertQuantity}</span>{" "}
+                        <span className="gg-chip-unit">{item.unit}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              )}
             </table>
           </div>
         </div>

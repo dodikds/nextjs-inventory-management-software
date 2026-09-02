@@ -276,3 +276,44 @@ export async function getTopCustomersThisMonth(limit = 5): Promise<TopCustomersR
     })),
   };
 }
+
+export type StockAlertItem = {
+  productId: string;
+  code: string;
+  productName: string;
+  warehouseId: string;
+  warehouseName: string;
+  quantity: number;
+  alertQuantity: number;
+  unit: string;
+};
+
+// Prisma's query builder has no way to compare two columns to each other
+// (ProductStock.quantity <= Product.stockAlert isn't expressible as a
+// `where` filter), so this is a raw SQL join instead of a groupBy/aggregate
+// — still fully DB-side (MySQL does the filtering, nothing is loaded into
+// JS to compare), just not through the query builder. No user input is
+// interpolated into the template, so this is not injectable. Excludes
+// products with no alert threshold set (stockAlert IS NULL) — nothing to
+// compare against — and soft-deleted products/warehouses.
+export async function getStockAlerts(): Promise<StockAlertItem[]> {
+  return dbPrisma.$queryRaw<StockAlertItem[]>`
+    SELECT
+      p.id AS productId,
+      p.code AS code,
+      p.name AS productName,
+      w.id AS warehouseId,
+      w.name AS warehouseName,
+      ps.quantity AS quantity,
+      p.stockAlert AS alertQuantity,
+      p.productUnit AS unit
+    FROM product_stocks ps
+    JOIN products p ON p.id = ps.productId
+    JOIN warehouses w ON w.id = ps.warehouseId
+    WHERE p.deletedAt IS NULL
+      AND w.deletedAt IS NULL
+      AND p.stockAlert IS NOT NULL
+      AND ps.quantity <= p.stockAlert
+    ORDER BY ps.quantity ASC
+  `;
+}
