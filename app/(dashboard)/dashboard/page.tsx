@@ -18,16 +18,10 @@ import {
   getTopSellingProductsThisYear,
   getTopSellingProductsThisMonth,
   getTopCustomersThisMonth,
+  getRecentSales,
 } from "./queries";
+import { STATUS_BADGE, PAYMENT_STATUS_BADGE } from "../sales/badges";
 import styles from "./dashboard.module.css";
-
-const RECENT_SALES = [
-  { ref: "SA_11149", customer: "direct-customer", total: "71,800.00", paid: "71,800.00", due: "0.00" },
-  { ref: "SA_11148", customer: "direct-customer", total: "31,920.00", paid: "31,920.00", due: "0.00" },
-  { ref: "SA_11147", customer: "direct-customer", total: "7,980.00", paid: "7,980.00", due: "0.00" },
-  { ref: "SA_11146", customer: "direct-customer", total: "11,970.00", paid: "11,970.00", due: "0.00" },
-  { ref: "SA_11145", customer: "direct-customer", total: "7,980.00", paid: "7,980.00", due: "0.00" },
-] as const;
 
 const STOCK_ALERTS = [
   { code: "002", product: "ipl laser hair removal", warehouse: "Office", qty: "0" },
@@ -35,12 +29,13 @@ const STOCK_ALERTS = [
 ] as const;
 
 export default async function DashboardPage() {
-  const [kpis, weekData, topProductsYear, topProductsMonth, topCustomers] = await Promise.all([
+  const [kpis, weekData, topProductsYear, topProductsMonth, topCustomers, recentSales] = await Promise.all([
     getDashboardKpis(),
     getWeekSalesAndPurchases(),
     getTopSellingProductsThisYear(),
     getTopSellingProductsThisMonth(),
     getTopCustomersThisMonth(),
+    getRecentSales(),
   ]);
 
   const KPIS = [
@@ -172,25 +167,33 @@ export default async function DashboardPage() {
                   <th>Payment Status</th>
                 </tr>
               </thead>
-              <tbody>
-                {RECENT_SALES.map((sale) => (
-                  <tr key={sale.ref}>
-                    <td>
-                      <span className="gg-chip-code">{sale.ref}</span>
-                    </td>
-                    <td>{sale.customer}</td>
-                    <td>
-                      <span className="gg-badge gg-badge--success">Received</span>
-                    </td>
-                    <td className="gg-num gg-td-strong">$ {sale.total}</td>
-                    <td className="gg-num">$ {sale.paid}</td>
-                    <td className="gg-num">$ {sale.due}</td>
-                    <td>
-                      <span className="gg-badge gg-badge--success">Paid</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              {recentSales.length === 0 ? (
+                <tbody className={styles["empty-table-body"]} />
+              ) : (
+                <tbody>
+                  {recentSales.map((sale) => {
+                    const badge = STATUS_BADGE[sale.status];
+                    const paymentBadge = PAYMENT_STATUS_BADGE[sale.paymentStatus];
+                    return (
+                      <tr key={sale.id}>
+                        <td>
+                          <span className="gg-chip-code">{sale.reference}</span>
+                        </td>
+                        <td>{sale.customerName}</td>
+                        <td>{badge && <span className={`gg-badge ${badge.variant}`}>{badge.label}</span>}</td>
+                        <td className="gg-num gg-td-strong">$ {formatMoney(sale.grandTotal)}</td>
+                        <td className="gg-num">$ {formatMoney(sale.paid)}</td>
+                        <td className="gg-num">$ {formatMoney(sale.due)}</td>
+                        <td>
+                          {paymentBadge && (
+                            <span className={`gg-badge ${paymentBadge.variant}`}>{paymentBadge.label}</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              )}
             </table>
           </div>
         </div>

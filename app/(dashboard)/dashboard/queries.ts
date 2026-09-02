@@ -1,5 +1,42 @@
 import { dbPrisma } from "@/lib/db";
 
+export type RecentSale = {
+  id: string;
+  reference: string;
+  customerName: string;
+  status: string;
+  grandTotal: number;
+  paid: number;
+  due: number;
+  paymentStatus: string;
+};
+
+// Same fields, same `deletedAt: null` filter, and the same `status`/
+// `paymentStatus` values as the Sales list page's own getSales() (see
+// ../sales/queries.ts) — status/paymentStatus are rendered through that
+// module's shared badge maps (../sales/badges.ts) so this table can't
+// disagree with the Sales list on label or color. paid/due come straight
+// off the Sale row, not recomputed, matching how the list page reads them.
+export async function getRecentSales(limit = 5): Promise<RecentSale[]> {
+  const sales = await dbPrisma.sale.findMany({
+    where: { deletedAt: null },
+    include: { customer: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+  });
+
+  return sales.map((sale) => ({
+    id: sale.id,
+    reference: sale.reference,
+    customerName: sale.customer.name,
+    status: sale.status,
+    grandTotal: Number(sale.grandTotal),
+    paid: Number(sale.paid),
+    due: Number(sale.due),
+    paymentStatus: sale.paymentStatus,
+  }));
+}
+
 // UTC calendar-day range, `daysAgo` days back from today — matching how
 // `date` columns are stored across Sale/Purchase/Expense (see e.g.
 // ../sales/queries.ts's own parseDateFilter: `${value}T00:00:00.000Z`), not

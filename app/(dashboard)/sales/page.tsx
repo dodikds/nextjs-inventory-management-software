@@ -11,6 +11,7 @@ import SalePagination from "@/components/sales/SalePagination";
 import SaleTableSkeleton from "@/components/sales/SaleTableSkeleton";
 import SaleRowActions from "@/components/sales/SaleRowActions";
 import { getSales, parsePage, parsePerPage } from "./queries";
+import { STATUS_BADGE, PAYMENT_STATUS_BADGE } from "./badges";
 import styles from "./sales.module.css";
 
 type SalesPageProps = {
@@ -56,18 +57,6 @@ type SaleTableSectionProps = {
   page: number;
   perPage: number;
   canManage: boolean;
-};
-
-const STATUS_BADGE: Record<string, { label: string; variant: string }> = {
-  RECEIVED: { label: "Received", variant: "gg-badge--success" },
-  PENDING: { label: "Pending", variant: "gg-badge--warning" },
-  ORDERED: { label: "Ordered", variant: "gg-badge--info" },
-};
-
-const PAYMENT_STATUS_BADGE: Record<string, { label: string; variant: string }> = {
-  PAID: { label: "Paid", variant: "gg-badge--success" },
-  PARTIAL: { label: "Partial", variant: "gg-badge--warning" },
-  UNPAID: { label: "Unpaid", variant: "gg-badge--danger" },
 };
 
 async function SaleTableSection({ q, date, page, perPage, canManage }: SaleTableSectionProps) {
