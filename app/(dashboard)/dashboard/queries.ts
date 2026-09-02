@@ -131,3 +131,63 @@ export async function getWeekSalesAndPurchases(): Promise<WeekSalesPurchasesPoin
     purchases: Number(sums[i * 2 + 1]._sum.grandTotal ?? 0),
   }));
 }
+
+export type TopSellingProduct = {
+  productId: string;
+  name: string;
+  quantity: number;
+  grandTotal: number;
+};
+
+export type TopSellingProductsResult = {
+  label: string;
+  products: TopSellingProduct[];
+};
+
+// Ranked and sized by revenue (sum of SaleItem.subtotal) rather than
+// quantity — the same metric for both the "top N" cutoff and the doughnut's
+// slice sizes, so the chart and its sibling table can never disagree about
+// which products are "top selling".
+async function getTopSellingProducts(
+  range: { gte: Date; lt: Date },
+  limit: number,
+): Promise<TopSellingProduct[]> {
+  const grouped = await dbPrisma.saleItem.groupBy({
+    by: ["productId"],
+    where: { sale: { deletedAt: null, status: "RECEIVED", date: range } },
+    _sum: { quantity: true, subtotal: true },
+    orderBy: { _sum: { subtotal: "desc" } },
+    take: limit,
+  });
+  if (grouped.length === 0) return [];
+
+  const products = await dbPrisma.product.findMany({
+    where: { id: { in: grouped.map((g) => g.productId) } },
+    select: { id: true, name: true },
+  });
+  const nameById = new Map(products.map((p) => [p.id, p.name]));
+
+  return grouped.map((g) => ({
+    productId: g.productId,
+    name: nameById.get(g.productId) ?? "Unknown",
+    quantity: g._sum.quantity ?? 0,
+    grandTotal: Number(g._sum.subtotal ?? 0),
+  }));
+}
+
+export async function getTopSellingProductsThisYear(limit = 5): Promise<TopSellingProductsResult> {
+  const year = new Date().getUTCFullYear();
+  const start = new Date(Date.UTC(year, 0, 1));
+  const end = new Date(Date.UTC(year + 1, 0, 1));
+  const products = await getTopSellingProducts({ gte: start, lt: end }, limit);
+  return { label: String(year), products };
+}
+
+export async function getTopSellingProductsThisMonth(limit = 5): Promise<TopSellingProductsResult> {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const products = await getTopSellingProducts({ gte: start, lt: end }, limit);
+  const label = start.toLocaleString("en-US", { month: "long", timeZone: "UTC" });
+  return { label, products };
+}

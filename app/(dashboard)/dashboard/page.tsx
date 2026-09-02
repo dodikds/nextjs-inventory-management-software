@@ -12,7 +12,12 @@ import WeekSalesChart from "@/components/dashboard/WeekSalesChart";
 import TopProductsChart from "@/components/dashboard/TopProductsChart";
 import TopCustomersChart from "@/components/dashboard/TopCustomersChart";
 import { formatMoney } from "@/lib/format";
-import { getDashboardKpis, getWeekSalesAndPurchases } from "./queries";
+import {
+  getDashboardKpis,
+  getWeekSalesAndPurchases,
+  getTopSellingProductsThisYear,
+  getTopSellingProductsThisMonth,
+} from "./queries";
 import styles from "./dashboard.module.css";
 
 const RECENT_SALES = [
@@ -29,7 +34,12 @@ const STOCK_ALERTS = [
 ] as const;
 
 export default async function DashboardPage() {
-  const [kpis, weekData] = await Promise.all([getDashboardKpis(), getWeekSalesAndPurchases()]);
+  const [kpis, weekData, topProductsYear, topProductsMonth] = await Promise.all([
+    getDashboardKpis(),
+    getWeekSalesAndPurchases(),
+    getTopSellingProductsThisYear(),
+    getTopSellingProductsThisMonth(),
+  ]);
 
   const KPIS = [
     { tone: "gold", icon: ShoppingCart, value: kpis.sales, label: "Sales" },
@@ -80,7 +90,7 @@ export default async function DashboardPage() {
 
           <div className="gg-card">
             <div className="gg-card-head">
-              <span className="gg-card-title">Top Selling Products (May)</span>
+              <span className="gg-card-title">Top Selling Products ({topProductsMonth.label})</span>
             </div>
             <div className="gg-card-pad" style={{ paddingTop: 0 }}>
               <table className="gg-table">
@@ -91,7 +101,21 @@ export default async function DashboardPage() {
                     <th style={{ textAlign: "right" }}>Grand Total</th>
                   </tr>
                 </thead>
-                <tbody className={styles["empty-table-body"]} />
+                {topProductsMonth.products.length === 0 ? (
+                  <tbody className={styles["empty-table-body"]} />
+                ) : (
+                  <tbody>
+                    {topProductsMonth.products.map((p) => (
+                      <tr key={p.productId}>
+                        <td className="gg-td-strong">{p.name}</td>
+                        <td className="gg-num">{p.quantity}</td>
+                        <td className="gg-num" style={{ textAlign: "right" }}>
+                          $ {formatMoney(p.grandTotal)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                )}
               </table>
             </div>
           </div>
@@ -100,11 +124,14 @@ export default async function DashboardPage() {
         <div className={styles["dash-col"]}>
           <div className="gg-card">
             <div className="gg-card-head">
-              <span className="gg-card-title">Top Selling Products (2026)</span>
+              <span className="gg-card-title">Top Selling Products ({topProductsYear.label})</span>
             </div>
             <div className="gg-card-pad">
               <div className={styles["chart-box"]} style={{ height: 340 }}>
-                <TopProductsChart />
+                <TopProductsChart
+                  labels={topProductsYear.products.map((p) => p.name)}
+                  values={topProductsYear.products.map((p) => p.grandTotal)}
+                />
               </div>
             </div>
           </div>
