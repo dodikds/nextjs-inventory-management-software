@@ -7,12 +7,14 @@ import { signOut, useSession } from "next-auth/react";
 import { Menu, Plus, Monitor, Grid2x2, ChevronDown, User, KeyRound, LogOut } from "lucide-react";
 import { useSidebarCollapse } from "./AppShell";
 import { getPageTitle } from "./nav-data";
+import ReportsTabs from "./ReportsTabs";
 import styles from "./Topbar.module.css";
 
 export default function Topbar() {
   const pathname = usePathname();
   const { toggleCollapsed } = useSidebarCollapse();
   const title = getPageTitle(pathname);
+  const isReportsRoute = pathname.startsWith("/reports");
   const { data: session } = useSession();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -62,8 +64,9 @@ export default function Topbar() {
         <span className="gg-page-chip">
           <Plus />
         </span>
-        <span className="gg-breadcrumb">{title}</span>
+        {!isReportsRoute && <span className="gg-breadcrumb">{title}</span>}
       </div>
+      {isReportsRoute && <ReportsTabs />}
       <div className="gg-topbar-spacer" />
       <button className="gg-pos-btn">
         <Monitor style={{ width: 16, height: 16 }} /> POS

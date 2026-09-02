@@ -8,6 +8,14 @@ import { Search, ChevronRight } from "lucide-react";
 import { hasPermission } from "@/lib/permissions";
 import { NAV, type NavEntry } from "./nav-data";
 
+// A link is "active" on its own page and any of its sub-routes (e.g.
+// "/reports" while on "/reports/warehouse") — plain equality alone would
+// never highlight a module whose content all lives under sub-routes, which
+// is exactly Reports' shape (see app/(dashboard)/reports).
+function isNavActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 // Hides nav entries the signed-in user lacks permission for — UX only. The
 // real enforcement is each page/action's own server-side hasPermission()
 // check; a hidden link here is never what stops unauthorized access.
@@ -73,7 +81,7 @@ export default function Sidebar() {
       <nav className="gg-nav">
         {nav.map((entry) => {
           if (entry.type === "link") {
-            const isActive = pathname === entry.href;
+            const isActive = isNavActive(pathname, entry.href);
             const Icon = entry.icon;
             return (
               <Link
@@ -98,7 +106,7 @@ export default function Sidebar() {
               </div>
               <div className="gg-nav-sub">
                 {entry.children.map((child) => {
-                  const isActive = pathname === child.href;
+                  const isActive = isNavActive(pathname, child.href);
                   return (
                     <Link
                       key={child.href}
