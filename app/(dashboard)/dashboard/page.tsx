@@ -29,7 +29,7 @@ const STOCK_ALERTS = [
 ] as const;
 
 export default async function DashboardPage() {
-  const kpis = await getDashboardKpis();
+  const [kpis, weekData] = await Promise.all([getDashboardKpis(), getWeekSalesAndPurchases()]);
 
   const KPIS = [
     { tone: "gold", icon: ShoppingCart, value: kpis.sales, label: "Sales" },
@@ -69,7 +69,11 @@ export default async function DashboardPage() {
             </div>
             <div className="gg-card-pad">
               <div className={styles["chart-box"]} style={{ height: 300 }}>
-                <WeekSalesChart />
+                <WeekSalesChart
+                  labels={weekData.map((d) => d.date)}
+                  sales={weekData.map((d) => d.sales)}
+                  purchases={weekData.map((d) => d.purchases)}
+                />
               </div>
             </div>
           </div>
