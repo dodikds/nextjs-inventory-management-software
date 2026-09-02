@@ -45,3 +45,36 @@ export async function getWarehouseReportCounts(warehouseId?: string): Promise<Wa
 
   return { sales, purchases, salesReturns, purchasesReturns };
 }
+
+// Product has no "cost" field anywhere in this app (not on the model, not
+// on the Products list/view/form) — the only real cost data that exists is
+// PurchaseItem.netUnitCost, recorded per purchase line. This computes each
+// product's weighted-average purchase cost — sum(subtotal)/sum(quantity)
+// across its RECEIVED, non-deleted purchases — as a DB-side groupBy
+// followed by one division per product (not per row), rather than
+// inventing a flat per-unit average that ignores how much was bought at
+// each price. A product never purchased gets 0.
+export async function getAverageCostMap(productIds: string[]): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  for (const id of productIds) {
+    result[id] = 0;
+  }
+  if (productIds.length === 0) return result;
+
+  const grouped = await dbPrisma.purchaseItem.groupBy({
+    by: ["productId"],
+    where: {
+      productId: { in: productIds },
+      purchase: { deletedAt: null, status: "RECEIVED" },
+    },
+    _sum: { subtotal: true, quantity: true },
+  });
+
+  for (const row of grouped) {
+    const quantity = row._sum.quantity ?? 0;
+    const subtotal = Number(row._sum.subtotal ?? 0);
+    result[row.productId] = quantity > 0 ? subtotal / quantity : 0;
+  }
+
+  return result;
+}

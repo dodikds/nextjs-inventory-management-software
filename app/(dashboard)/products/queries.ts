@@ -18,11 +18,18 @@ export function parsePage(value: string | undefined): number {
 
 type GetProductsParams = {
   q?: string;
+  // Optional — undefined/omitted means every warehouse, same "In Stock"
+  // total the Products list page has always shown. Stock Reports (see
+  // ../reports/stock/page.tsx) passes this to scope "Current Stock" down to
+  // one warehouse's own ProductStock row instead of the cross-warehouse
+  // sum — reusing this function rather than a second copy is what keeps
+  // that report's stock numbers unable to disagree with this list.
+  warehouseId?: string;
   page: number;
   perPage: number;
 };
 
-export async function getProducts({ q, page, perPage }: GetProductsParams) {
+export async function getProducts({ q, warehouseId, page, perPage }: GetProductsParams) {
   const where: Prisma.ProductWhereInput = {
     deletedAt: null,
     ...(q
@@ -46,12 +53,15 @@ export async function getProducts({ q, page, perPage }: GetProductsParams) {
       where,
       include: {
         brand: { select: { name: true } },
+        category: { select: { name: true } },
         // The first image (lowest sortOrder, ties broken by createdAt) is
         // the list thumbnail — see ProductImage's schema comment.
         images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], take: 1 },
         // "In Stock" is never a column — it's summed here from the
         // product×warehouse snapshot rows, per warehouse-level quantity.
-        stocks: { select: { quantity: true } },
+        // Scoped to one warehouse when warehouseId is given (see the params
+        // comment above); otherwise every warehouse's row is summed.
+        stocks: { select: { quantity: true }, ...(warehouseId ? { where: { warehouseId } } : {}) },
       },
       orderBy: { createdAt: "desc" },
       skip: (safePage - 1) * perPage,
