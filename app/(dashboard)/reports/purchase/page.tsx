@@ -26,7 +26,7 @@ export default async function PurchaseReportsPage({ searchParams }: PurchaseRepo
         <PurchaseSearch />
         <div className="gg-spacer" />
         <ReportsFilterButton />
-        <ReportsExcelButton />
+        <ReportsExcelButton exportPath="/reports/purchase/export" />
         <PurchaseDateFilter />
       </div>
 

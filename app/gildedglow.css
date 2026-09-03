@@ -510,7 +510,7 @@ button { font-family: inherit; }
 .btn-icon-gold { width: 46px; height: 42px; border-radius: var(--r-md); background: var(--gold-600); color: #fff; border: none; display: grid; place-items: center; cursor: pointer; transition: background .15s; }
 .btn-icon-gold:hover { background: var(--gold-700); }
 .btn-icon-gold svg { width: 18px; height: 18px; }
-.btn-excel { height: 42px; padding: 0 22px; border-radius: var(--r-md); background: var(--gold-600); color: #fff; border: none; font-weight: 600; font-family: var(--font-display); cursor: pointer; transition: background .15s; }
+.btn-excel { display: inline-flex; align-items: center; justify-content: center; height: 42px; padding: 0 22px; border-radius: var(--r-md); background: var(--gold-600); color: #fff; border: none; font-weight: 600; font-family: var(--font-display); text-decoration: none; cursor: pointer; transition: background .15s; }
 .btn-excel:hover { background: var(--gold-700); }
 .btn-excel:disabled { opacity: .6; cursor: default; }
 .btn-reports { height: 36px; padding: 0 24px; border-radius: var(--r-sm); background: var(--gold-600); color: #fff; border: none; font-weight: 600; font-family: var(--font-display); cursor: pointer; transition: background .15s; }

@@ -28,7 +28,7 @@ export default async function StockReportsPage({ searchParams }: StockReportsPag
       <div className="rpt-toolbar">
         <ProductSearch />
         <div className="gg-spacer" />
-        <ReportsExcelButton />
+        <ReportsExcelButton exportPath="/reports/stock/export" />
       </div>
 
       <div className="gg-card gg-card-pad">

@@ -131,7 +131,7 @@ export default async function WarehouseReportsPage({ searchParams }: WarehouseRe
         {subtab === "expenses" && <ExpenseSearch />}
         <div className="gg-spacer" />
         <ReportsFilterButton />
-        <ReportsExcelButton />
+        <ReportsExcelButton exportPath="/reports/warehouse/export" />
       </div>
 
       <div className="gg-card gg-card-pad">

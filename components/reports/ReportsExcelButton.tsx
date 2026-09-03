@@ -1,14 +1,25 @@
 "use client";
 
-import toast from "react-hot-toast";
+import { useSearchParams } from "next/navigation";
 
-// Placeholder until Step 6 wires up the real server-side .xlsx export —
-// kept as its own component now so every report's toolbar already has the
-// button in its final position and only this file changes later.
-export default function ReportsExcelButton() {
+type ReportsExcelButtonProps = {
+  // The report's own export route, e.g. "/reports/sale/export". Every
+  // filter currently on screen (q, date, warehouseId, subtab, ...) is
+  // whatever's already in the URL's search params, so forwarding them
+  // as-is is what makes the export match "the currently filtered result
+  // set" rather than the full table — page/perPage ride along too but the
+  // export route ignores them (it always exports every matching row).
+  exportPath: string;
+};
+
+export default function ReportsExcelButton({ exportPath }: ReportsExcelButtonProps) {
+  const searchParams = useSearchParams();
+  const qs = searchParams.toString();
+  const href = qs ? `${exportPath}?${qs}` : exportPath;
+
   return (
-    <button className="btn-excel" type="button" onClick={() => toast("Excel export isn't available yet")}>
+    <a className="btn-excel" href={href}>
       EXCEL
-    </button>
+    </a>
   );
 }

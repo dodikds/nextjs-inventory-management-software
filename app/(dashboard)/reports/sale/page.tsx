@@ -26,7 +26,7 @@ export default async function SaleReportsPage({ searchParams }: SaleReportsPageP
         <SaleSearch />
         <div className="gg-spacer" />
         <ReportsFilterButton />
-        <ReportsExcelButton />
+        <ReportsExcelButton exportPath="/reports/sale/export" />
         <SaleDateFilter />
       </div>
 
