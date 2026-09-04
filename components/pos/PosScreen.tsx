@@ -19,10 +19,16 @@ import {
   RotateCw,
   Banknote,
   PackageSearch,
+  Minus,
+  Plus,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import { getPosProducts, type PosProduct } from "@/app/(pos)/pos/actions";
+import SaleItemModal, { type SaleItemModalValues } from "@/components/sales/SaleItemModal";
 import styles from "./PosScreen.module.css";
 
 type OptionItem = { id: string; name: string };
@@ -33,7 +39,39 @@ type PosScreenProps = {
   customers: CustomerOption[];
   categories: OptionItem[];
   brands: OptionItem[];
+  units: OptionItem[];
 };
+
+// Same shape as SaleForm's own SaleItemState — a cart line is a Sale line
+// that just hasn't been saved yet. Every new line starts at zero discount,
+// matching design/Create Sale.html's own example row; a line only picks up
+// a discount/tax once the pencil-icon modal (SaleItemModal, reused verbatim
+// from Sales) is used to set one.
+type CartItem = {
+  productId: string;
+  code: string;
+  name: string;
+  unitPrice: string;
+  /** Current quantity in the selected warehouse — a UX hint only (Step 3); the authoritative check happens server-side at payment. */
+  stock: number;
+  quantity: number;
+  discountType: DiscountType;
+  discount: string;
+  taxType: TaxType;
+  orderTax: string;
+  unit: string;
+};
+
+function lineTotals(item: CartItem) {
+  return calculateLineTotals({
+    unitCost: item.unitPrice || 0,
+    quantity: item.quantity,
+    discountType: item.discountType,
+    discount: item.discount || 0,
+    taxType: item.taxType,
+    taxRate: item.orderTax || 0,
+  });
+}
 
 // No real product photography is wired into POS yet — a deterministic
 // gradient per product (hashed from its code) stands in for a thumbnail,
@@ -56,7 +94,7 @@ function gradientFor(seed: string): [string, string] {
   return CARD_GRADIENTS[hash % CARD_GRADIENTS.length];
 }
 
-export default function PosScreen({ warehouses, customers, categories, brands }: PosScreenProps) {
+export default function PosScreen({ warehouses, customers, categories, brands, units }: PosScreenProps) {
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [customerId, setCustomerId] = useState(
     customers.find((customer) => customer.isDefault)?.id ?? customers[0]?.id ?? "",
@@ -72,6 +110,12 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
   const [isWarehouseMenuOpen, setIsWarehouseMenuOpen] = useState(false);
   const [isCustomerMenuOpen, setIsCustomerMenuOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [orderTaxPercent, setOrderTaxPercent] = useState("0.00");
+  const [discount, setDiscount] = useState("0.00");
+  const [shipping, setShipping] = useState("0.00");
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
   const whRef = useRef<HTMLDivElement>(null);
   const custRef = useRef<HTMLDivElement>(null);
@@ -107,14 +151,24 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
   }, [warehouseId]);
 
   function handleWarehouseSelect(id: string) {
+    if (id === warehouseId) {
+      setIsWarehouseMenuOpen(false);
+      return;
+    }
+    if (cartItems.length > 0 && !window.confirm("Switching warehouses will clear the current cart. Continue?")) {
+      setIsWarehouseMenuOpen(false);
+      return;
+    }
     setWarehouseId(id);
     setIsWarehouseMenuOpen(false);
     // Same reasoning as SaleForm's own handleWarehouseChange — stock and the
-    // product grid are scoped to one warehouse, so filters are wiped rather
-    // than carrying stale results over.
+    // product grid are scoped to one warehouse, so filters (and any cart
+    // lines, which reference this warehouse's stock) are wiped rather than
+    // carrying stale results over.
     setSearchQuery("");
     setCategoryId(null);
     setBrandId(null);
+    setCartItems([]);
   }
 
   function toggleFullscreen() {
@@ -131,13 +185,62 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
     toast(`${label} — coming soon`);
   }
 
+  // Clicking a product adds it to the cart, or increments the existing
+  // line's quantity if it's already there — never a second row for the same
+  // product.
   function handleSelectProduct(product: PosProduct) {
-    // Cart state lands in Step 2 — this just confirms the grid is wired.
-    toast(`Would add "${product.name}" to the cart (Step 2)`);
+    setCartItems((prev) => {
+      const existing = prev.find((item) => item.productId === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item,
+        );
+      }
+      return [
+        ...prev,
+        {
+          productId: product.id,
+          code: product.code,
+          name: product.name,
+          unitPrice: product.price,
+          stock: product.stock,
+          quantity: 1,
+          discountType: "FIXED",
+          discount: "0.00",
+          taxType: product.taxType,
+          orderTax: product.orderTax,
+          unit: product.productUnit,
+        },
+      ];
+    });
+  }
+
+  function updateItemQuantity(productId: string, quantity: number) {
+    setCartItems((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, quantity: Math.max(1, quantity) } : item)),
+    );
+  }
+
+  function removeItem(productId: string) {
+    setCartItems((prev) => prev.filter((item) => item.productId !== productId));
+    if (editingProductId === productId) setEditingProductId(null);
+  }
+
+  function handleSaveItemModal(values: SaleItemModalValues) {
+    setCartItems((prev) => prev.map((item) => (item.productId === editingProductId ? { ...item, ...values } : item)));
+    setEditingProductId(null);
+  }
+
+  function handleReset() {
+    setCartItems([]);
+    setOrderTaxPercent("0.00");
+    setDiscount("0.00");
+    setShipping("0.00");
   }
 
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId) ?? null;
   const selectedCustomer = customers.find((customer) => customer.id === customerId) ?? null;
+  const editingItem = cartItems.find((item) => item.productId === editingProductId) ?? null;
 
   const query = searchQuery.trim().toLowerCase();
   const filteredProducts = products.filter((product) => {
@@ -147,6 +250,18 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
       return false;
     }
     return true;
+  });
+
+  // Every number the cart shows comes from the same shared pricing utility
+  // Sales itself uses (lib/pricing.ts) — createSale recomputes these exact
+  // figures server-side from the raw inputs, so nothing here can drift from
+  // what the saved Sale ends up with.
+  const totalQty = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const orderTotals = calculateOrderTotals({
+    lineSubtotals: cartItems.map((item) => lineTotals(item).subtotal),
+    orderTaxRate: orderTaxPercent || 0,
+    discount: discount || 0,
+    shipping: shipping || 0,
   });
 
   return (
@@ -228,49 +343,118 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
             <span></span>
           </div>
           <div className={styles.cartBody}>
-            {/* Cart state (rows, totals, Hold/Reset/Pay Now) lands in Step 2. */}
-            <div className={styles.cartEmpty}>
-              <ShoppingCart />
-              <span>Cart is empty — tap a product to add it here.</span>
-            </div>
+            {cartItems.length === 0 ? (
+              <div className={styles.cartEmpty}>
+                <ShoppingCart />
+                <span>Cart is empty — tap a product to add it here.</span>
+              </div>
+            ) : (
+              cartItems.map((item) => {
+                const { subtotal } = lineTotals(item);
+                return (
+                  <div key={item.productId} className={styles.cartRow}>
+                    <div className={styles.lineInfo}>
+                      <div className={styles.lineName}>{item.name}</div>
+                      <div className={styles.lineMeta}>
+                        <span className={styles.lineCode}>{item.code}</span>
+                        <button
+                          type="button"
+                          className={styles.lineEdit}
+                          title="Edit line details"
+                          onClick={() => setEditingProductId(item.productId)}
+                        >
+                          <Pencil />
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.stepper}>
+                      <button
+                        type="button"
+                        className={styles.stepBtn}
+                        onClick={() => updateItemQuantity(item.productId, item.quantity - 1)}
+                      >
+                        <Minus />
+                      </button>
+                      <span className={`${styles.stepQty} gg-num`}>{item.quantity}</span>
+                      <button
+                        type="button"
+                        className={styles.stepBtn}
+                        onClick={() => updateItemQuantity(item.productId, item.quantity + 1)}
+                      >
+                        <Plus />
+                      </button>
+                    </div>
+                    <div className={`${styles.linePrice} gg-num`}>$ {formatMoney(item.unitPrice)}</div>
+                    <div className={`${styles.lineSub} gg-num`}>$ {formatMoney(subtotal)}</div>
+                    <button
+                      type="button"
+                      className={styles.lineDel}
+                      title="Remove"
+                      onClick={() => removeItem(item.productId)}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           <div className={styles.cartFoot}>
             <div className={styles.footGrid}>
               <div className={styles.footFields}>
                 <div className={styles.footInput}>
-                  <input placeholder="Tax" value="0.00" disabled readOnly />
+                  <input
+                    placeholder="Tax"
+                    value={orderTaxPercent}
+                    onChange={(e) => setOrderTaxPercent(e.target.value)}
+                  />
                   <span className={styles.suf}>%</span>
                 </div>
                 <div className={styles.footInput}>
-                  <input placeholder="Discount" value="0.00" disabled readOnly />
+                  <input placeholder="Discount" value={discount} onChange={(e) => setDiscount(e.target.value)} />
                   <span className={styles.suf}>$</span>
                 </div>
                 <div className={styles.footInput}>
-                  <input placeholder="Shipping" value="0.00" disabled readOnly />
+                  <input placeholder="Shipping" value={shipping} onChange={(e) => setShipping(e.target.value)} />
                   <span className={styles.suf}>$</span>
                 </div>
               </div>
               <div className={styles.totals}>
                 <div className={`${styles.tq} gg-num`}>
-                  Total QTY : <span>0</span>
+                  Total QTY : <span>{totalQty}</span>
                 </div>
                 <div className={`${styles.st} gg-num`}>
-                  Sub Total : $ <span>{formatMoney(0)}</span>
+                  Sub Total : $ <span>{formatMoney(orderTotals.itemsTotal)}</span>
                 </div>
                 <div className={`${styles.gt} gg-num`}>
-                  Total : <b>$ {formatMoney(0)}</b>
+                  Total : <b>$ {formatMoney(orderTotals.grandTotal)}</b>
                 </div>
               </div>
             </div>
             <div className={styles.cartActions}>
-              <button type="button" className={`${styles.posBtn} ${styles.btnHold}`} disabled>
+              <button
+                type="button"
+                className={`${styles.posBtn} ${styles.btnHold}`}
+                disabled={cartItems.length === 0}
+                onClick={() => stub("Hold order (Step 4)")}
+              >
                 Hold <Hand />
               </button>
-              <button type="button" className={`${styles.posBtn} ${styles.btnReset}`} disabled>
+              <button
+                type="button"
+                className={`${styles.posBtn} ${styles.btnReset}`}
+                disabled={cartItems.length === 0}
+                onClick={handleReset}
+              >
                 Reset <RotateCw />
               </button>
-              <button type="button" className={`${styles.posBtn} ${styles.btnPay}`} disabled>
+              <button
+                type="button"
+                className={`${styles.posBtn} ${styles.btnPay}`}
+                disabled={cartItems.length === 0}
+                onClick={() => stub("Pay Now (Step 5)")}
+              >
                 Pay Now <Banknote />
               </button>
             </div>
@@ -423,6 +607,23 @@ export default function PosScreen({ warehouses, customers, categories, brands }:
           </div>
         </div>
       </div>
+
+      {editingItem && (
+        <SaleItemModal
+          productName={editingItem.name}
+          units={units}
+          initialValues={{
+            unitPrice: editingItem.unitPrice,
+            taxType: editingItem.taxType,
+            orderTax: editingItem.orderTax,
+            discountType: editingItem.discountType,
+            discount: editingItem.discount,
+            unit: editingItem.unit,
+          }}
+          onSave={handleSaveItemModal}
+          onClose={() => setEditingProductId(null)}
+        />
+      )}
     </div>
   );
 }

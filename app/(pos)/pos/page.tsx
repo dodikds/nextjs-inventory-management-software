@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { hasPermission } from "@/lib/permissions";
-import { getWarehouseOptions, getCustomerOptions } from "@/app/(dashboard)/sales/queries";
+import { getWarehouseOptions, getCustomerOptions, getUnitOptions } from "@/app/(dashboard)/sales/queries";
 import { getCategoryOptions, getBrandOptions } from "@/app/(dashboard)/products/queries";
 import PosScreen from "@/components/pos/PosScreen";
 
@@ -15,12 +15,21 @@ export default async function PosPage() {
     redirect("/dashboard");
   }
 
-  const [warehouses, customers, categories, brands] = await Promise.all([
+  const [warehouses, customers, categories, brands, units] = await Promise.all([
     getWarehouseOptions(),
     getCustomerOptions(),
     getCategoryOptions(),
     getBrandOptions(),
+    getUnitOptions(),
   ]);
 
-  return <PosScreen warehouses={warehouses} customers={customers} categories={categories} brands={brands} />;
+  return (
+    <PosScreen
+      warehouses={warehouses}
+      customers={customers}
+      categories={categories}
+      brands={brands}
+      units={units}
+    />
+  );
 }
