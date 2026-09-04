@@ -23,6 +23,7 @@ import {
   Plus,
   Pencil,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
@@ -187,37 +188,70 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
 
   // Clicking a product adds it to the cart, or increments the existing
   // line's quantity if it's already there — never a second row for the same
-  // product.
+  // product. Stock is a client-side HINT only (Step 3) — createSale's own
+  // adjustProductStock call is the real, authoritative guard at payment
+  // time, so this never blocks adding a line outright; it only stops the
+  // cashier from silently stepping past what this warehouse shows in stock.
+  // toast() is a side effect (it updates the Toaster's own state), so it
+  // can't run inside a setCartItems updater callback — React may invoke
+  // that callback more than once, and doing so while another component is
+  // rendering trips "Cannot update a component while rendering a different
+  // component". The stock check reads straight from the cartItems closure
+  // instead, and toast/setCartItems run as separate, ordinary statements.
   function handleSelectProduct(product: PosProduct) {
-    setCartItems((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item,
-        );
+    const existing = cartItems.find((item) => item.productId === product.id);
+    if (existing) {
+      if (existing.quantity >= product.stock) {
+        toast.error(`Only ${product.stock} ${product.productUnit} of "${product.name}" in stock here`);
+        return;
       }
-      return [
-        ...prev,
-        {
-          productId: product.id,
-          code: product.code,
-          name: product.name,
-          unitPrice: product.price,
-          stock: product.stock,
-          quantity: 1,
-          discountType: "FIXED",
-          discount: "0.00",
-          taxType: product.taxType,
-          orderTax: product.orderTax,
-          unit: product.productUnit,
-        },
-      ];
-    });
+      setCartItems((prev) =>
+        prev.map((item) => (item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item)),
+      );
+      return;
+    }
+
+    if (product.stock <= 0) {
+      toast(`"${product.name}" is out of stock here — added anyway, payment will confirm the real stock`, {
+        icon: "⚠️",
+      });
+    }
+    setCartItems((prev) => [
+      ...prev,
+      {
+        productId: product.id,
+        code: product.code,
+        name: product.name,
+        unitPrice: product.price,
+        stock: product.stock,
+        quantity: 1,
+        discountType: "FIXED",
+        discount: "0.00",
+        taxType: product.taxType,
+        orderTax: product.orderTax,
+        unit: product.productUnit,
+      },
+    ]);
   }
 
-  function updateItemQuantity(productId: string, quantity: number) {
+  function decrementItem(productId: string) {
     setCartItems((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, quantity: Math.max(1, quantity) } : item)),
+      prev.map((item) => (item.productId === productId ? { ...item, quantity: Math.max(1, item.quantity - 1) } : item)),
+    );
+  }
+
+  // Same stock ceiling as handleSelectProduct's own increment path — the
+  // stepper is the other place a line's quantity can grow, so it needs the
+  // same hint-only cap.
+  function incrementItem(productId: string) {
+    const item = cartItems.find((i) => i.productId === productId);
+    if (!item) return;
+    if (item.quantity >= item.stock) {
+      toast.error(`Only ${item.stock} ${item.unit} of "${item.name}" in stock here`);
+      return;
+    }
+    setCartItems((prev) =>
+      prev.map((i) => (i.productId === productId ? { ...i, quantity: i.quantity + 1 } : i)),
     );
   }
 
@@ -351,8 +385,15 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
             ) : (
               cartItems.map((item) => {
                 const { subtotal } = lineTotals(item);
+                // Hint only — createSale's own stock check at payment is
+                // authoritative, this just flags it early for the cashier.
+                const isOverStock = item.quantity > item.stock;
+                const atStockCeiling = item.quantity >= item.stock;
                 return (
-                  <div key={item.productId} className={styles.cartRow}>
+                  <div
+                    key={item.productId}
+                    className={`${styles.cartRow} ${isOverStock ? styles.cartRowWarn : ""}`}
+                  >
                     <div className={styles.lineInfo}>
                       <div className={styles.lineName}>{item.name}</div>
                       <div className={styles.lineMeta}>
@@ -365,24 +406,36 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
                         >
                           <Pencil />
                         </button>
+                        {isOverStock && (
+                          <span className={styles.stockWarn} title={`Only ${item.stock} ${item.unit} in stock here`}>
+                            <TriangleAlert />
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className={styles.stepper}>
-                      <button
-                        type="button"
-                        className={styles.stepBtn}
-                        onClick={() => updateItemQuantity(item.productId, item.quantity - 1)}
-                      >
-                        <Minus />
-                      </button>
-                      <span className={`${styles.stepQty} gg-num`}>{item.quantity}</span>
-                      <button
-                        type="button"
-                        className={styles.stepBtn}
-                        onClick={() => updateItemQuantity(item.productId, item.quantity + 1)}
-                      >
-                        <Plus />
-                      </button>
+                    <div className={styles.qtyCell}>
+                      <div className={styles.stepper}>
+                        <button
+                          type="button"
+                          className={styles.stepBtn}
+                          onClick={() => decrementItem(item.productId)}
+                        >
+                          <Minus />
+                        </button>
+                        <span className={`${styles.stepQty} gg-num`}>{item.quantity}</span>
+                        <button
+                          type="button"
+                          className={styles.stepBtn}
+                          onClick={() => incrementItem(item.productId)}
+                          disabled={atStockCeiling}
+                          title={atStockCeiling ? `Only ${item.stock} ${item.unit} in stock here` : undefined}
+                        >
+                          <Plus />
+                        </button>
+                      </div>
+                      <div className={`${styles.stockHint} ${isOverStock ? styles.stockHintWarn : ""} gg-num`}>
+                        {isOverStock ? `Only ${item.stock} in stock` : `${item.stock} in stock`}
+                      </div>
                     </div>
                     <div className={`${styles.linePrice} gg-num`}>$ {formatMoney(item.unitPrice)}</div>
                     <div className={`${styles.lineSub} gg-num`}>$ {formatMoney(subtotal)}</div>
