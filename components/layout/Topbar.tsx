@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { Menu, Plus, Monitor, Grid2x2, ChevronDown, User, KeyRound, LogOut } from "lucide-react";
+import { hasPermission } from "@/lib/permissions";
 import { useSidebarCollapse } from "./AppShell";
 import { getPageTitle } from "./nav-data";
 import ReportsTabs from "./ReportsTabs";
@@ -68,9 +69,11 @@ export default function Topbar() {
       </div>
       {isReportsRoute && <ReportsTabs />}
       <div className="gg-topbar-spacer" />
-      <button className="gg-pos-btn">
-        <Monitor style={{ width: 16, height: 16 }} /> POS
-      </button>
+      {hasPermission(session ?? null, "manage_pos_screen") && (
+        <Link href="/pos" className="gg-pos-btn">
+          <Monitor style={{ width: 16, height: 16 }} /> POS
+        </Link>
+      )}
       <button className="gg-icon-btn">
         <Grid2x2 />
       </button>
