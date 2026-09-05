@@ -26,11 +26,14 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import Decimal from "decimal.js";
 import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxType } from "@/lib/pricing";
 import { formatMoney } from "@/lib/format";
 import { getPosProducts, type PosProduct } from "@/app/(pos)/pos/actions";
+import { createSale } from "@/app/(dashboard)/sales/actions";
 import SaleItemModal, { type SaleItemModalValues } from "@/components/sales/SaleItemModal";
 import HeldOrdersModal from "./HeldOrdersModal";
+import PayNowModal, { type PayNowResult } from "./PayNowModal";
 import { loadHeldOrders, saveHeldOrders, type HeldOrder } from "./heldOrders";
 import styles from "./PosScreen.module.css";
 
@@ -104,6 +107,18 @@ function generateHeldOrderId(): string {
   return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `held-${Date.now()}`;
 }
 
+// Same local-date formatting as SaleForm's own todayInputValue — a POS sale
+// is dated the cashier's current calendar day, not lib/format.ts's
+// toDateInputValue (which reads UTC getters, meant for values already
+// stored as UTC midnight).
+function todayInputValue(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function PosScreen({ warehouses, customers, categories, brands, units }: PosScreenProps) {
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [customerId, setCustomerId] = useState(
@@ -131,6 +146,8 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
   const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
   const hasLoadedHeldOrders = useRef(false);
   const [, startHeldOrdersLoadTransition] = useTransition();
+
+  const [isPayModalOpen, setIsPayModalOpen] = useState(false);
 
   const whRef = useRef<HTMLDivElement>(null);
   const custRef = useRef<HTMLDivElement>(null);
@@ -359,6 +376,65 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
   function handleDiscardHeldOrder(id: string) {
     if (!window.confirm("Discard this held order? This can't be undone.")) return;
     setHeldOrders((prev) => prev.filter((order) => order.id !== id));
+  }
+
+  // The single most important function on this screen (see AGENTS.md): a
+  // POS sale must be IDENTICAL to one created from Sales, so this calls the
+  // exact same createSale server action — same validation, same
+  // calculateLineTotals/calculateOrderTotals, same adjustProductStock
+  // guard, same SA_ reference generation, same createSale transaction —
+  // nothing about saving a sale or moving stock is reimplemented here.
+  // status is always RECEIVED: a POS sale hands over goods immediately, so
+  // stock decrements in the same transaction that creates the Sale.
+  async function handleConfirmPayment(values: { amountTendered: string; paymentType: string }): Promise<PayNowResult> {
+    let cappedPaid: string;
+    try {
+      // The till only actually keeps the sale's own total — any amount
+      // tendered above that is change handed back to the customer, so only
+      // min(tendered, grandTotal) is ever recorded as this Sale's `paid`.
+      const tendered = new Decimal(values.amountTendered || 0);
+      cappedPaid = Decimal.min(tendered, orderTotals.grandTotal).toFixed(2);
+    } catch {
+      return { success: false, message: "Enter a valid amount tendered" };
+    }
+
+    const result = await createSale({
+      date: todayInputValue(),
+      warehouseId,
+      customerId,
+      items: cartItems.map((item) => ({
+        productId: item.productId,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        discountType: item.discountType,
+        discount: item.discount,
+        taxType: item.taxType,
+        orderTax: item.orderTax,
+        unit: item.unit,
+      })),
+      orderTax: orderTaxPercent,
+      discount,
+      shipping,
+      status: "RECEIVED",
+      paid: cappedPaid,
+      paymentType: values.paymentType,
+    });
+
+    if (!result.success) {
+      return { success: false, message: result.message };
+    }
+
+    // The sale is safely recorded (and stock already decremented, inside
+    // createSale's own transaction) — clear the cart so the cashier can
+    // start the next customer. The Pay Now modal stays open to show its own
+    // success/receipt view; PosScreen doesn't need to close anything here.
+    setCartItems([]);
+    setOrderTaxPercent("0.00");
+    setDiscount("0.00");
+    setShipping("0.00");
+    setCustomerId(customers.find((customer) => customer.isDefault)?.id ?? customers[0]?.id ?? "");
+
+    return { success: true, saleId: result.id };
   }
 
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId) ?? null;
@@ -595,7 +671,7 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
                 type="button"
                 className={`${styles.posBtn} ${styles.btnPay}`}
                 disabled={cartItems.length === 0}
-                onClick={() => stub("Pay Now (Step 5)")}
+                onClick={() => setIsPayModalOpen(true)}
               >
                 Pay Now <Banknote />
               </button>
@@ -773,6 +849,14 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
           onResume={handleResumeHeldOrder}
           onDiscard={handleDiscardHeldOrder}
           onClose={() => setIsHeldOrdersModalOpen(false)}
+        />
+      )}
+
+      {isPayModalOpen && (
+        <PayNowModal
+          grandTotal={orderTotals.grandTotal}
+          onSubmit={handleConfirmPayment}
+          onClose={() => setIsPayModalOpen(false)}
         />
       )}
     </div>
