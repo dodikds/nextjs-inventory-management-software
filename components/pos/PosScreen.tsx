@@ -30,6 +30,8 @@ import { calculateLineTotals, calculateOrderTotals, type DiscountType, type TaxT
 import { formatMoney } from "@/lib/format";
 import { getPosProducts, type PosProduct } from "@/app/(pos)/pos/actions";
 import SaleItemModal, { type SaleItemModalValues } from "@/components/sales/SaleItemModal";
+import HeldOrdersModal from "./HeldOrdersModal";
+import { loadHeldOrders, saveHeldOrders, type HeldOrder } from "./heldOrders";
 import styles from "./PosScreen.module.css";
 
 type OptionItem = { id: string; name: string };
@@ -95,6 +97,13 @@ function gradientFor(seed: string): [string, string] {
   return CARD_GRADIENTS[hash % CARD_GRADIENTS.length];
 }
 
+// A module-scope helper (rather than inline in handleHold) so the
+// impure-by-nature Date.now()/crypto.randomUUID() calls aren't attributed
+// to the component's own render body.
+function generateHeldOrderId(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `held-${Date.now()}`;
+}
+
 export default function PosScreen({ warehouses, customers, categories, brands, units }: PosScreenProps) {
   const [warehouseId, setWarehouseId] = useState(warehouses[0]?.id ?? "");
   const [customerId, setCustomerId] = useState(
@@ -118,6 +127,11 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
   const [shipping, setShipping] = useState("0.00");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
 
+  const [heldOrders, setHeldOrders] = useState<HeldOrder[]>([]);
+  const [isHeldOrdersModalOpen, setIsHeldOrdersModalOpen] = useState(false);
+  const hasLoadedHeldOrders = useRef(false);
+  const [, startHeldOrdersLoadTransition] = useTransition();
+
   const whRef = useRef<HTMLDivElement>(null);
   const custRef = useRef<HTMLDivElement>(null);
 
@@ -137,6 +151,29 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
+
+  // localStorage only exists client-side, so held orders load in an effect
+  // rather than in useState's initializer — that keeps the very first
+  // render (server-rendered, then hydrated) at an empty list on both sides,
+  // avoiding a hydration mismatch, then syncs in the real list right after.
+  // Wrapped in startTransition (same as the product loader below) so the
+  // setState isn't a direct, synchronous call inside the effect body.
+  useEffect(() => {
+    startHeldOrdersLoadTransition(async () => {
+      setHeldOrders(loadHeldOrders());
+    });
+  }, []);
+
+  // Skips the first run (the initial, still-loading [] from the mount
+  // above) so it can never race ahead of the load effect and clobber
+  // storage with an empty array before the real list has been read in.
+  useEffect(() => {
+    if (!hasLoadedHeldOrders.current) {
+      hasLoadedHeldOrders.current = true;
+      return;
+    }
+    saveHeldOrders(heldOrders);
+  }, [heldOrders]);
 
   // The only "load products" server call the screen makes (see AGENTS.md) —
   // fired on mount and whenever the warehouse changes; every other filter
@@ -270,6 +307,58 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
     setOrderTaxPercent("0.00");
     setDiscount("0.00");
     setShipping("0.00");
+  }
+
+  // Parks the current cart so the cashier can start a new one — a held
+  // order is never a Sale and never touches stock (see AGENTS.md); it's
+  // just this same cart/customer/warehouse state, snapshotted to
+  // localStorage until it's resumed or discarded.
+  function handleHold() {
+    if (cartItems.length === 0) return;
+    const held: HeldOrder = {
+      id: generateHeldOrderId(),
+      heldAt: new Date().toISOString(),
+      warehouseId,
+      warehouseName: selectedWarehouse?.name ?? "Unknown warehouse",
+      customerId,
+      customerName: selectedCustomer?.name ?? "Unknown customer",
+      items: cartItems,
+      orderTaxPercent,
+      discount,
+      shipping,
+    };
+    setHeldOrders((prev) => [held, ...prev]);
+    setCartItems([]);
+    setOrderTaxPercent("0.00");
+    setDiscount("0.00");
+    setShipping("0.00");
+    setCustomerId(customers.find((customer) => customer.isDefault)?.id ?? customers[0]?.id ?? "");
+    toast.success("Order held — resume it anytime from the list");
+  }
+
+  function handleResumeHeldOrder(id: string) {
+    const held = heldOrders.find((order) => order.id === id);
+    if (!held) return;
+    if (cartItems.length > 0 && !window.confirm("Resuming will replace your current cart. Continue?")) {
+      return;
+    }
+    setWarehouseId(held.warehouseId);
+    setCustomerId(held.customerId);
+    setCartItems(held.items);
+    setOrderTaxPercent(held.orderTaxPercent);
+    setDiscount(held.discount);
+    setShipping(held.shipping);
+    setSearchQuery("");
+    setCategoryId(null);
+    setBrandId(null);
+    setHeldOrders((prev) => prev.filter((order) => order.id !== id));
+    setIsHeldOrdersModalOpen(false);
+    toast.success("Order resumed");
+  }
+
+  function handleDiscardHeldOrder(id: string) {
+    if (!window.confirm("Discard this held order? This can't be undone.")) return;
+    setHeldOrders((prev) => prev.filter((order) => order.id !== id));
   }
 
   const selectedWarehouse = warehouses.find((warehouse) => warehouse.id === warehouseId) ?? null;
@@ -490,7 +579,7 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
                 type="button"
                 className={`${styles.posBtn} ${styles.btnHold}`}
                 disabled={cartItems.length === 0}
-                onClick={() => stub("Hold order (Step 4)")}
+                onClick={handleHold}
               >
                 Hold <Hand />
               </button>
@@ -531,10 +620,10 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
               type="button"
               className={`${styles.tool} ${styles.toolRose}`}
               title="Held orders"
-              onClick={() => stub("Held orders")}
+              onClick={() => setIsHeldOrdersModalOpen(true)}
             >
               <List />
-              <span className={`${styles.badge} gg-num`}>0</span>
+              <span className={`${styles.badge} gg-num`}>{heldOrders.length}</span>
             </button>
             <button
               type="button"
@@ -675,6 +764,15 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
           }}
           onSave={handleSaveItemModal}
           onClose={() => setEditingProductId(null)}
+        />
+      )}
+
+      {isHeldOrdersModalOpen && (
+        <HeldOrdersModal
+          heldOrders={heldOrders}
+          onResume={handleResumeHeldOrder}
+          onDiscard={handleDiscardHeldOrder}
+          onClose={() => setIsHeldOrdersModalOpen(false)}
         />
       )}
     </div>
