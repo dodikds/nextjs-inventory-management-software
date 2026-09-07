@@ -79,9 +79,10 @@ function lineTotals(item: CartItem) {
   });
 }
 
-// No real product photography is wired into POS yet — a deterministic
-// gradient per product (hashed from its code) stands in for a thumbnail,
-// same visual language as design/POS.html's hardcoded per-product colors.
+// Fallback for products with no uploaded image (PosProduct.thumbnail is
+// null) — a deterministic gradient per product (hashed from its code)
+// stands in for a thumbnail, same visual language as design/POS.html's
+// hardcoded per-product colors.
 const CARD_GRADIENTS: [string, string][] = [
   ["#E48FA6", "#C75C7E"],
   ["#9FB6C9", "#6E8BA6"],
@@ -795,6 +796,13 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
               <div className={styles.prodGrid}>
                 {filteredProducts.map((product) => {
                   const [c1, c2] = gradientFor(product.code || product.id);
+                  const phStyle = product.thumbnail
+                    ? {
+                        backgroundImage: `url(${product.thumbnail})`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center",
+                      }
+                    : { background: `linear-gradient(140deg, ${c1}, ${c2})` };
                   return (
                     <button
                       type="button"
@@ -802,7 +810,7 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
                       className={styles.pcard}
                       onClick={() => handleSelectProduct(product)}
                     >
-                      <div className={styles.ph} style={{ background: `linear-gradient(140deg, ${c1}, ${c2})` }}>
+                      <div className={styles.ph} style={phStyle}>
                         <span className={`${styles.tag} ${styles.tagPrice} gg-num`}>
                           $ {formatMoney(product.price)}
                         </span>
@@ -811,7 +819,7 @@ export default function PosScreen({ warehouses, customers, categories, brands, u
                         >
                           {product.stock} {product.productUnit}
                         </span>
-                        <Sparkles />
+                        {!product.thumbnail && <Sparkles />}
                       </div>
                       <div className={styles.pbody}>
                         <div className={styles.pname}>{product.name}</div>

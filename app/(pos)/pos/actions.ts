@@ -18,6 +18,8 @@ export type PosProduct = {
   productUnit: string;
   taxType: "EXCLUSIVE" | "INCLUSIVE";
   orderTax: string;
+  /** Path to the product's first image (lowest sortOrder), same source as the Products list thumbnail — null falls back to the card's gradient placeholder. */
+  thumbnail: string | null;
 };
 
 const warehouseIdSchema = z.string().trim().min(1);
@@ -53,6 +55,7 @@ export async function getPosProducts(warehouseId: string): Promise<PosProduct[]>
     where: { deletedAt: null },
     include: {
       stocks: { where: { warehouseId: parsed.data }, select: { quantity: true } },
+      images: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], take: 1, select: { path: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -68,5 +71,6 @@ export async function getPosProducts(warehouseId: string): Promise<PosProduct[]>
     productUnit: product.productUnit,
     taxType: product.taxType,
     orderTax: (product.orderTax ?? 0).toString(),
+    thumbnail: product.images[0]?.path ?? null,
   }));
 }
