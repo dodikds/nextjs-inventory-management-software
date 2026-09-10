@@ -1,21 +1,36 @@
 .pos {
   display: grid;
-  grid-template-columns: 620px 1fr;
+  /* minmax(0, 1fr) — not a bare 1fr — so the right column can actually
+     shrink below its content's intrinsic width instead of blowing out the
+     grid; without it, on narrower windows the tools row/product grid push
+     past the viewport and overflow: hidden below silently clips them. */
+  grid-template-columns: minmax(440px, 620px) minmax(0, 1fr);
   gap: var(--sp-4);
   height: 100vh;
+  height: 100dvh;
   padding: var(--sp-4);
   background: var(--canvas);
   overflow: hidden;
+}
+@media (max-width: 980px) {
+  .pos {
+    grid-template-columns: 1fr;
+    grid-auto-rows: minmax(480px, 1fr);
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
 }
 .col {
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   min-height: 0;
+  min-width: 0;
 }
 
 /* ---- top bars ---- */
-.bar { display: flex; gap: var(--sp-3); flex: none; }
+.bar { display: flex; gap: var(--sp-3); flex: none; flex-wrap: wrap; }
 
 /* Positioning context for the dropdown — kept separate from .custBox
    itself, which needs its own overflow: hidden to clip its rounded
@@ -66,7 +81,9 @@
 .custAdd svg { width: 20px; height: 20px; }
 
 .whBox {
-  width: 250px;
+  width: clamp(170px, 20vw, 250px);
+  flex: 0 1 250px;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -129,11 +146,11 @@
 }
 .searchBox input::placeholder { color: var(--gray-400); }
 
-.tools { display: flex; gap: var(--sp-3); }
+.tools { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
 .tool {
   position: relative;
-  width: 70px;
-  height: 70px;
+  width: clamp(52px, 6vw, 70px);
+  height: clamp(52px, 6vw, 70px);
   border-radius: var(--r-lg);
   border: none;
   cursor: pointer;
@@ -141,6 +158,7 @@
   place-items: center;
   box-shadow: var(--shadow-sm);
   transition: filter 0.15s;
+  flex: none;
 }
 .tool:hover { filter: brightness(0.96); }
 .tool svg { width: 26px; height: 26px; color: #fff; }
@@ -176,7 +194,7 @@
 }
 .cartHead, .cartRow {
   display: grid;
-  grid-template-columns: 1fr 132px 110px 110px 34px;
+  grid-template-columns: minmax(0, 1fr) minmax(76px, 132px) minmax(64px, 110px) minmax(64px, 110px) 34px;
   align-items: center;
   gap: var(--sp-3);
 }
@@ -184,6 +202,7 @@
 .cartHead {
   padding-bottom: var(--sp-4);
   border-bottom: 1px solid var(--gray-200);
+  flex-shrink: 0;
 }
 .cartHead span {
   font-size: 12px;
@@ -280,7 +299,7 @@
 
 /* ---- cart footer ---- */
 .cartFoot { flex: none; padding-top: var(--sp-5); }
-.footGrid { display: grid; grid-template-columns: 300px 1fr; gap: var(--sp-6); align-items: end; }
+.footGrid { display: grid; grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: var(--sp-6); align-items: end; }
 .footFields { display: flex; flex-direction: column; gap: var(--sp-3); }
 .footInput { position: relative; }
 .footInput input {
