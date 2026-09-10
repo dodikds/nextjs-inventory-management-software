@@ -56,6 +56,21 @@ export function isPermission(value: string): value is Permission {
 // release) rather than trusting it blindly. Shared by the session callback
 // in auth.ts and the Role edit page.
 export function toPermissions(value: unknown): Permission[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((entry): entry is Permission => typeof entry === "string" && isPermission(entry));
+  let permissions: unknown = value;
+
+  // Role.permissions is stored as JSON text in MySQL LongText.
+  if (typeof value === "string") {
+    try {
+      permissions = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(permissions)) return [];
+
+  return permissions.filter(
+    (entry): entry is Permission =>
+      typeof entry === "string" && isPermission(entry)
+  );
 }

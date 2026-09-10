@@ -138,8 +138,14 @@ async function seedRoles() {
   for (const { name, permissions } of ROLE_SEED_DATA) {
     await dbPrisma.role.upsert({
       where: { name },
-      update: name === "admin" ? { permissions } : {},
-      create: { name, permissions },
+      update:
+        name === "admin"
+          ? { permissions: JSON.stringify(permissions) }
+          : {},
+      create: {
+        name,
+        permissions: JSON.stringify(permissions),
+      },
     });
   }
 

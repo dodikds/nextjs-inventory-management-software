@@ -66,7 +66,12 @@ export async function createRole(_prevState: RoleFormState, formData: FormData):
   }
 
   try {
-    await dbPrisma.role.create({ data: parsed.data });
+    await dbPrisma.role.create({
+      data: {
+        name: parsed.data.name,
+        permissions: JSON.stringify(parsed.data.permissions),
+      },
+    });
   } catch (error) {
     if (isDuplicateNameError(error)) {
       return { errors: { name: "A role with this name already exists" }, message: "Please fix the errors below" };
@@ -133,7 +138,13 @@ export async function updateRole(
   }
 
   try {
-    await dbPrisma.role.update({ where: { id: parsedId.data }, data: parsed.data });
+    await dbPrisma.role.update({
+      where: { id: parsedId.data },
+      data: {
+        name: parsed.data.name,
+        permissions: JSON.stringify(parsed.data.permissions),
+      },
+});
   } catch (error) {
     if (isDuplicateNameError(error)) {
       return { errors: { name: "A role with this name already exists" }, message: "Please fix the errors below" };
